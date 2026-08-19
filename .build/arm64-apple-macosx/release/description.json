@@ -1,0 +1,520 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.TrackpadTyping-arm64-apple-macosx-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/sources",
+      "importPath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/CommonWords.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Config.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Decoder.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Diagnostics.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Geometry.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/GestureRecognizer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/HUDWindow.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/KeyboardLayout.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Lexicon.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SelfTest.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/MTBridge.build/MTBridge.c.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "TrackpadTyping",
+      "moduleOutputPath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/Modules/TrackpadTyping.swiftmodule",
+      "objects" : [
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/AppDelegate.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/CommonWords.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Config.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Decoder.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Diagnostics.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EventTapController.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Geometry.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/GestureRecognizer.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/HUDWindow.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/KeyboardLayout.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Lexicon.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TrackpadMonitor.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-whole-module-optimization",
+        "-num-threads",
+        "10",
+        "-serialize-diagnostics",
+        "-O",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-Xcc",
+        "-fmodule-map-file=/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/MTBridge.build/module.modulemap",
+        "-Xcc",
+        "-I",
+        "-Xcc",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/MTBridge/include",
+        "-module-cache-path",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "TrackpadTyping_main",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "trackpadtyping"
+      ],
+      "outputFileMapPath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/CommonWords.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Config.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Decoder.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Diagnostics.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EventTapController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Geometry.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/GestureRecognizer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/HUDWindow.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/KeyboardLayout.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Lexicon.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TrackpadMonitor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/Modules/TrackpadTyping.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/AppDelegate.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/CommonWords.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Config.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Decoder.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Diagnostics.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Geometry.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/GestureRecognizer.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/HUDWindow.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/KeyboardLayout.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Lexicon.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SelfTest.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift"
+      ],
+      "tempsPath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build",
+      "wholeModuleOptimization" : true
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "TrackpadTyping" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "TrackpadTyping",
+      "-package-name",
+      "trackpadtyping",
+      "-c",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/AppDelegate.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/CommonWords.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Config.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Decoder.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Diagnostics.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Geometry.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/GestureRecognizer.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/HUDWindow.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/KeyboardLayout.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Lexicon.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SelfTest.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift",
+      "-I",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-whole-module-optimization",
+      "-num-threads",
+      "10",
+      "-serialize-diagnostics",
+      "-O",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-Xcc",
+      "-fmodule-map-file=/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/MTBridge.build/module.modulemap",
+      "-Xcc",
+      "-I",
+      "-Xcc",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/MTBridge/include",
+      "-module-cache-path",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "TrackpadTyping_main",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "trackpadtyping",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "MTBridge" : [
+
+    ],
+    "TrackpadTyping" : [
+      "MTBridge"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/AppDelegate.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/CommonWords.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Config.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Decoder.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Diagnostics.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Geometry.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/GestureRecognizer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/HUDWindow.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/KeyboardLayout.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Lexicon.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SelfTest.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/sources"
+    },
+    "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/MTBridge.build/MTBridge.c.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/AppDelegate.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/CommonWords.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Config.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Decoder.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Diagnostics.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EventTapController.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Geometry.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/GestureRecognizer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/HUDWindow.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/KeyboardLayout.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Lexicon.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TrackpadMonitor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.product/Objects.LinkFileList"
+    },
+    "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}
