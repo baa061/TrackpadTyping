@@ -18,6 +18,26 @@ if args.contains("--ablate") {
     exit(0)
 }
 
+if let i = args.firstIndex(of: "--probe"), i + 1 < args.count {
+    _ = TrackpadMonitor.shared.start()
+    TrackpadMonitor.shared.stop()
+    let layout = KeyboardLayout(keyPitch: config.screenKeyPitch, rowPitchRatio: config.rowPitchRatio)
+    let lexicon = Lexicon(config: config)
+    let decoder = Decoder(layout: layout, lexicon: lexicon, config: config)
+    for word in args[(i + 1)...] {
+        print("\n=== \(word)  (in lexicon: \(lexicon.contains(word)))")
+        var rng = SeededRNG(seed: 99)
+        for trial in 0..<3 {
+            guard let path = SelfTest.synthesize(word: word, layout: layout,
+                                                 noiseKeys: 0.30, sloppy: trial == 2, rng: &rng) else { continue }
+            let cands = decoder.decode(path: path)
+            let list = cands.prefix(5).map { String(format: "%@ %.0f", $0.word, $0.score) }.joined(separator: "  ")
+            print("  trial \(trial)\(trial == 2 ? " (sloppy)" : ""): \(list)")
+        }
+    }
+    exit(0)
+}
+
 if args.contains("--sweep") {
     _ = TrackpadMonitor.shared.start()
     TrackpadMonitor.shared.stop()

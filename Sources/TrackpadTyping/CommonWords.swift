@@ -92,6 +92,15 @@ introduce involve join judge manage measure mention notice obtain occur perform 
 prepare present prevent produce protect provide publish realize recognize reduce refer reflect \
 refuse relate release remove repeat replace represent respond result reveal review search \
 select separate settle share solve sort stress submit succeed suggest supply survive teach \
-test thank throw touch train treat trust visit vote wonder worry write
+test thank throw touch train treat trust visit vote wonder worry write \
+haha yeah ok okay yep nope hey hi bye lol omg btw fyi thanks hmm huh wow oops ugh cool nice \
+gonna wanna gotta kinda sorta dunno lemme awesome super totally seriously literally honestly \
+stuff thing guys folks \
+whenever whatever wherever whoever whichever whyever anybody everybody somebody nobody anyway \
+anytime sometime someday anyhow somehow anymore forever meanwhile otherwise elsewhere further \
+furthermore moreover nonetheless nevertheless regardless despite unlike alike likewise \
+tonight tomorrow yesterday weekday weekends midnight noon afternoon evenings mornings \
+cannot wasnt dont wont cant isnt arent didnt doesnt havent hasnt wouldnt couldnt shouldnt \
+myself yourself ourselves themselves whatsoever
 """
 }

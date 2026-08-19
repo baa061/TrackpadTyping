@@ -808,6 +808,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateHUD(candidates: lastCommit!.candidates, selected: 0, status: letterRun)
     }
 
+    /// A word boundary just closed. If the finished word was spelled out by
+    /// hand and the lexicon has never seen it, learn it — this is the only way
+    /// genuinely new vocabulary ("haha", names, jargon) can enter the system,
+    /// since glides and bank picks can only ever produce known words.
+    private func learnCompletedWord() {
+        var chars = Array(typed)
+        while let c = chars.last, c == " " { chars.removeLast() }
+        var run: [Character] = []
+        while let c = chars.last, c.isLetter { run.insert(c, at: 0); chars.removeLast() }
+        let word = String(run).lowercased()
+        guard word.count >= 2, !lexicon.contains(word) else { return }
+        lexicon.learn(word, session: sessionNumber)
+        refreshBank()
+        updateHUD(candidates: [], status: "learned “\(word)”")
+    }
+
     /// "i" standing alone is always the pronoun; fix it as the word closes.
     private func fixStandaloneI() {
         if typed.hasSuffix("i"),
@@ -818,6 +834,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func insertSpace() {
+        learnCompletedWord()
         fixStandaloneI()
         letterRun = ""
         lastCommit = nil
@@ -858,6 +875,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        learnCompletedWord()
         letterRun = ""
         var trailing = 0
         for c in typed.reversed() { if c == " " { trailing += 1 } else { break } }

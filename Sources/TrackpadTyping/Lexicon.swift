@@ -52,7 +52,6 @@ final class Lexicon {
         loadCore()
         coreEnd = words.count
         if config.useSystemDictionary { loadSystemDictionary() }
-        basePrior = logPrior
         loadLearned()
     }
 
@@ -67,8 +66,13 @@ final class Lexicon {
     private func add(_ word: String, rank: Double, core: Bool) {
         guard indexOfWord[word] == nil, let key = Self.bucketKey(word) else { return }
         let idx = words.count
+        let prior = -Foundation.log(rank + 1.0)
         words.append(word)
-        logPrior.append(-Foundation.log(rank + 1.0))
+        logPrior.append(prior)
+        // basePrior must stay index-aligned with the arrays above — words can
+        // now be added after load (user-taught vocabulary), and a mismatch is
+        // an out-of-bounds crash in applyLearnedPrior.
+        basePrior.append(prior)
         isCore.append(core)
         buckets[key].append(idx)
         indexOfWord[word] = idx
@@ -175,14 +179,37 @@ final class Lexicon {
 
     func isLearned(_ word: String) -> Bool { learned[word.lowercased()] != nil }
 
-    /// The user's most-used words, most-used first, padded out to `n` with the
-    /// most common English words. Ties and the padding both defer to overall
-    /// frequency, so the bank is useful from first launch and each slot is
-    /// surrendered exactly when some other word overtakes its count.
+    func contains(_ word: String) -> Bool { indexOfWord[word.lowercased()] != nil }
+
+    /// Add a word the lexicon has never seen. The only path here is the user
+    /// spelling something out letter by letter and moving on — the strongest
+    /// signal there is that it's a real word to them ("haha", names, jargon).
+    /// It enters the fallback tier and earns promotion through the same
+    /// session-gated rules as everything else.
+    func learn(_ word: String, session: Int) {
+        let word = word.lowercased()
+        guard word.count >= 2, word.count <= 20 else { return }
+        guard word.allSatisfy({ $0.isASCII && $0.isLetter }) else { return }
+        guard indexOfWord[word] == nil else { return }
+        add(word, rank: config.fallbackRank, core: false)
+        reinforce(word, session: session)
+    }
+
+    /// The user's most-used words, padded out to `n` with the most common
+    /// English words. Ranking is recency-decayed rather than raw count: a raw
+    /// tally lets the first busy week entrench five words forever, and the
+    /// bank stops reflecting what the user types *now*. With a ten-day
+    /// half-life a word keeps its slot exactly as long as it keeps earning it.
     func topUsed(_ n: Int) -> [String] {
+        let now = Date().timeIntervalSince1970
+        func score(_ e: LearnedWord) -> Double {
+            let ageDays = max(0, now - e.lastUsed) / 86_400
+            return Double(e.count) * pow(0.5, ageDays / 10.0)
+        }
         var out = learned
             .sorted { a, b in
-                if a.value.count != b.value.count { return a.value.count > b.value.count }
+                let sa = score(a.value), sb = score(b.value)
+                if sa != sb { return sa > sb }
                 return (indexOfWord[a.key] ?? .max) < (indexOfWord[b.key] ?? .max)
             }
             .map { $0.key }
