@@ -71,13 +71,92 @@ final class Decoder {
 
     // MARK: - Decoding
 
+    /// Light low-pass on the raw trace: cursor jitter is high-frequency and
+    /// carries no intent, but it inflates every distance the scorer computes.
+    private static func smooth(_ pts: [Pt], passes: Int) -> [Pt] {
+        guard pts.count > 4 else { return pts }
+        var cur = pts
+        for _ in 0..<passes {
+            var out = cur
+            for i in 1..<(cur.count - 1) {
+                out[i] = Pt(x: (cur[i-1].x + cur[i].x * 2 + cur[i+1].x) / 4,
+                            y: (cur[i-1].y + cur[i].y * 2 + cur[i+1].y) / 4)
+            }
+            cur = out
+        }
+        return cur
+    }
+
+    /// Position weights over the resampled path: endpoints are aimed
+    /// deliberately and should count; the middle is where sloppiness lives
+    /// and is forgiven. 1.3 at the ends tapering to 0.7 mid-path.
+    private lazy var positionWeights: [Double] = {
+        let n = config.resampleCount
+        guard config.endWeighting else { return [Double](repeating: 1, count: n) }
+        return (0..<n).map { i in
+            let t = Double(i) / Double(max(n - 1, 1))
+            return 0.7 + 0.6 * pow(abs(2 * t - 1), 1.5)
+        }
+    }()
+
+    /// Weighted mean pointwise distance — the cheap first-pass score.
+    private func weightedPointDistance(_ a: [Pt], _ b: [Pt]) -> Double {
+        guard a.count == b.count, !a.isEmpty else { return .infinity }
+        var total = 0.0, wsum = 0.0
+        for i in 0..<a.count {
+            let w = positionWeights[i]
+            total += w * a[i].distance(to: b[i])
+            wsum += w
+        }
+        return total / wsum
+    }
+
+    /// Banded dynamic time warping. Rigid index-to-index comparison punishes a
+    /// single mid-word overshoot twice: once where it happens, and again at
+    /// every later point whose correspondence it shifted. DTW re-aligns
+    /// locally, so slop costs only where it occurs. The band caps how far the
+    /// alignment may wander, keeping "helpfully" degenerate alignments (and
+    /// the runtime) in check.
+    /// Rolling DP rows, reused across calls: a decode runs a few hundred DTWs
+    /// and per-row allocation dominated its cost.
+    private var dtwPrev: [Double] = []
+    private var dtwCur: [Double] = []
+
+    private func dtwDistance(_ a: [Pt], _ b: [Pt], band: Int) -> Double {
+        let n = a.count, m = b.count
+        guard n > 0 && m > 0 else { return .infinity }
+        let inf = Double.greatestFiniteMagnitude
+        if dtwPrev.count != m + 1 {
+            dtwPrev = [Double](repeating: inf, count: m + 1)
+            dtwCur = dtwPrev
+        }
+        for j in 0...m { dtwPrev[j] = inf; dtwCur[j] = inf }
+        dtwPrev[0] = 0
+        for i in 1...n {
+            let lo = max(1, i - band), hi = min(m, i + band)
+            // Clear the strip the band can touch, one cell wider on each
+            // side: the next row's band shifts right by one and reads this
+            // row at hi+1 — without the extra clear it would see a stale
+            // finite value from two rows back.
+            for j in max(0, lo - 1)...min(m, hi + 1) { dtwCur[j] = inf }
+            for j in lo...hi {
+                let w = positionWeights[min(j - 1, positionWeights.count - 1)]
+                let d = w * a[i - 1].distance(to: b[j - 1])
+                dtwCur[j] = d + min(dtwPrev[j], dtwCur[j - 1], dtwPrev[j - 1])
+            }
+            swap(&dtwPrev, &dtwCur)
+        }
+        return dtwPrev[m] / Double(n)
+    }
+
     /// - Parameter path: the traced path in layout-local coordinates.
     func decode(path rawPath: [Pt]) -> [Candidate] {
         guard rawPath.count >= 2 else { return [] }
 
-        let userLoc = Geometry.resample(rawPath, to: config.resampleCount)
+        let smoothed = Self.smooth(rawPath, passes: config.smoothingPasses)
+        let userLoc = Geometry.resample(smoothed, to: config.resampleCount)
         let userShape = Geometry.normalizeShape(userLoc, size: shapeNormSize)
-        let userLength = Geometry.pathLength(rawPath)
+        let userLength = Geometry.pathLength(smoothed)
 
         let radius = config.endpointRadiusKeys * layout.keyPitch
         var startLetters = layout.lettersNear(rawPath.first!, radius: radius)
@@ -89,8 +168,10 @@ final class Decoder {
 
         let indices = lexicon.candidateIndices(startLetters: startLetters, endLetters: endLetters)
 
-        var results: [Candidate] = []
-        results.reserveCapacity(min(indices.count, 512))
+        // Stage 1: cheap rigid scoring over every candidate the buckets and
+        // the length prune allow. Its job is only to nominate finalists.
+        var firstPass: [(idx: Int, prior: Double, shape: Double, location: Double, score: Double)] = []
+        firstPass.reserveCapacity(min(indices.count, 512))
 
         for idx in indices {
             guard ensureTemplate(idx), let tLen = templateLength[idx] else { continue }
@@ -106,16 +187,39 @@ final class Decoder {
 
             guard let tLoc = locationCache[idx], let tShape = shapeCache[idx] else { continue }
 
-            let shape = Geometry.meanPointDistance(userShape, tShape)
-            let location = Geometry.meanPointDistance(userLoc, tLoc)
+            let shape = weightedPointDistance(userShape, tShape)
+            let location = weightedPointDistance(userLoc, tLoc)
             let priorPenalty = -lexicon.logPrior[idx] * priorScale
                              + (lexicon.isCore[idx] ? 0 : fallbackPenalty)
 
+            firstPass.append((idx, priorPenalty, shape, location,
+                              shape * config.shapeWeight
+                              + location * config.locationWeight
+                              + priorPenalty))
+        }
+
+        firstPass.sort { $0.score < $1.score }
+
+        // Stage 2: blended rescoring of the finalists. The rigid distances
+        // stay in the score as the discriminator; the elastic (DTW) term is
+        // mixed in to forgive local slop. DTW is ~20x the cost of the rigid
+        // pass, so it runs on the short list where it matters.
+        let band = max(2, Int(Double(config.resampleCount) * config.dtwBandFraction))
+        let blend = min(max(config.dtwBlend, 0), 1)
+        var results: [Candidate] = []
+        results.reserveCapacity(config.rescoreCount)
+
+        for entry in firstPass.prefix(config.rescoreCount) {
+            guard let tLoc = locationCache[entry.idx],
+                  let tShape = shapeCache[entry.idx] else { continue }
+            let shape = (1 - blend) * entry.shape
+                      + blend * dtwDistance(userShape, tShape, band: band)
+            let location = (1 - blend) * entry.location
+                         + blend * dtwDistance(userLoc, tLoc, band: band)
             let score = shape * config.shapeWeight
                       + location * config.locationWeight
-                      + priorPenalty
-
-            results.append(Candidate(word: lexicon.words[idx], score: score,
+                      + entry.prior
+            results.append(Candidate(word: lexicon.words[entry.idx], score: score,
                                      shape: shape, location: location))
         }
 

@@ -30,6 +30,10 @@ final class EventTapController {
     var candidatesActive = false
     /// +1 for right, -1 for left.
     var onArrow: ((Int) -> Void)?
+    /// Horizontal scroll delta (points) while glide mode is on — drives the
+    /// candidate strip. Scroll events are consumed so the app behind the
+    /// keyboard does not also scroll.
+    var onStripScroll: ((Double) -> Void)?
 
     /// While glide mode is on, the pointer is confined to this rect (screen
     /// coordinates, bottom-left origin — the AppKit convention). Nil disables
@@ -157,6 +161,19 @@ private func eventTapCallback(proxy: CGEventTapProxy,
     if controller.glideModeActive && (type == .leftMouseDown || type == .leftMouseUp) {
         let down = (type == .leftMouseDown)
         DispatchQueue.main.async { (down ? controller.onTraceDown : controller.onTraceUp)?() }
+        return nil
+    }
+
+    if type == .scrollWheel && controller.glideModeActive {
+        // Trackpads report precise point deltas; line-based sources (and
+        // synthetic events) only populate the coarse axis field.
+        var dx = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
+        if abs(dx) < 0.01 {
+            dx = event.getDoubleValueField(.scrollWheelEventDeltaAxis2) * 10.0
+        }
+        if abs(dx) > 0.01 {
+            DispatchQueue.main.async { controller.onStripScroll?(dx) }
+        }
         return nil
     }
 

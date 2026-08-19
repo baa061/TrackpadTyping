@@ -11,6 +11,8 @@ final class HUDView: NSView {
     var hoverPoint: Pt?
     var candidates: [String] = []
     var selectedIndex: Int = 0
+    /// Horizontal scroll position of the candidate strip, in points.
+    var candidateOffset: CGFloat = 0
     var statusText: String = ""
     var bankWords: [String] = []
     /// Chip frames from the last candidate-strip draw, for click hit-testing.
@@ -26,7 +28,7 @@ final class HUDView: NSView {
     override var isFlipped: Bool { false }   // y up, matching the layout
 
     static let margin: CGFloat = 10
-    static let stripHeight: CGFloat = 34
+    static let stripHeight: CGFloat = 46
     static let bankHeight: CGFloat = 34
     /// Slim strip across the very top; click-holding it moves the panel.
     static let grabberHeight: CGFloat = 16
@@ -265,10 +267,25 @@ final class HUDView: NSView {
         }
     }
 
+    private var stripRect: NSRect {
+        NSRect(x: Self.margin,
+               y: bounds.height - Self.grabberHeight - Self.textBarHeight - Self.stripHeight + 3,
+               width: bounds.width - Self.margin * 2,
+               height: Self.stripHeight - 6)
+    }
+
+    /// Width of the full chip row at the current sizes, for offset clamping.
+    func candidateContentWidth() -> CGFloat {
+        let font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        var w: CGFloat = 4
+        for word in candidates {
+            w += NSString(string: word).size(withAttributes: [.font: font]).width + 24 + 10
+        }
+        return w
+    }
+
     private func drawCandidateStrip() {
-        // Below the typed-text bar: grabber, then text bar, then this strip.
-        let y = bounds.height - Self.grabberHeight - Self.textBarHeight - Self.stripHeight + 4
-        var x = Self.margin + 2
+        let strip = stripRect
         candidateRects = []
 
         guard !candidates.isEmpty else {
@@ -276,30 +293,58 @@ final class HUDView: NSView {
                 .font: NSFont.systemFont(ofSize: 13, weight: .medium),
                 .foregroundColor: NSColor(calibratedWhite: 0.55, alpha: 1),
             ]
-            NSString(string: statusText).draw(at: NSPoint(x: x, y: y + 6), withAttributes: attrs)
+            NSString(string: statusText).draw(
+                at: NSPoint(x: strip.minX + 4, y: strip.midY - 8), withAttributes: attrs)
             return
         }
 
+        // Chips render shifted by the scroll offset and clipped to the strip;
+        // hit-test rects are recorded at their on-screen positions, so clicks
+        // keep working wherever the strip is scrolled to.
+        let maxOffset = max(0, candidateContentWidth() - strip.width)
+        candidateOffset = min(max(candidateOffset, 0), maxOffset)
+
+        NSGraphicsContext.current?.saveGraphicsState()
+        NSBezierPath(rect: strip).addClip()
+
+        var x = strip.minX + 4 - candidateOffset
         for (i, word) in candidates.enumerated() {
             let selected = (i == selectedIndex)
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 13, weight: selected ? .semibold : .regular),
-                .foregroundColor: selected ? NSColor.white : NSColor(calibratedWhite: 0.55, alpha: 1),
+                .font: NSFont.systemFont(ofSize: 16, weight: selected ? .semibold : .medium),
+                .foregroundColor: selected ? NSColor.white : NSColor(calibratedWhite: 0.62, alpha: 1),
             ]
             let str = NSString(string: word)
             let size = str.size(withAttributes: attrs)
-            if x + size.width + 24 > bounds.width - Self.margin { break }
+            let chip = NSRect(x: x, y: strip.minY + 4,
+                              width: size.width + 24, height: strip.height - 8)
 
-            let chip = NSRect(x: x - 8, y: y + 1, width: size.width + 16, height: size.height + 6)
-            candidateRects.append(chip)
-            if selected {
-                NSColor(calibratedRed: 0.24, green: 0.5, blue: 0.95, alpha: 0.95).setFill()
+            if chip.maxX > strip.minX && chip.minX < strip.maxX {   // visible
+                if selected {
+                    NSColor(calibratedRed: 0.24, green: 0.5, blue: 0.95, alpha: 0.95).setFill()
+                } else {
+                    NSColor(calibratedWhite: 0.20, alpha: 0.9).setFill()
+                }
+                NSBezierPath(roundedRect: chip, xRadius: 9, yRadius: 9).fill()
+                str.draw(at: NSPoint(x: chip.minX + 12, y: chip.midY - size.height / 2),
+                         withAttributes: attrs)
+                candidateRects.append(chip)
             } else {
-                NSColor(calibratedWhite: 0.20, alpha: 0.9).setFill()   // visibly clickable
+                candidateRects.append(.zero)   // keep indices aligned for hit tests
             }
-            NSBezierPath(roundedRect: chip, xRadius: 7, yRadius: 7).fill()
-            str.draw(at: NSPoint(x: x, y: y + 4), withAttributes: attrs)
-            x += size.width + 30
+            x = chip.maxX + 10
+        }
+
+        NSGraphicsContext.current?.restoreGraphicsState()
+
+        // Edge fades hint that there is more to scroll to.
+        if candidateOffset > 1 {
+            NSColor(calibratedWhite: 0.09, alpha: 0.8).setFill()
+            NSRect(x: strip.minX, y: strip.minY, width: 10, height: strip.height).fill()
+        }
+        if candidateOffset < maxOffset - 1 {
+            NSColor(calibratedWhite: 0.09, alpha: 0.8).setFill()
+            NSRect(x: strip.maxX - 10, y: strip.minY, width: 10, height: strip.height).fill()
         }
     }
 
@@ -449,7 +494,7 @@ final class HUDWindow: NSPanel {
 
     func candidateIndex(screenPoint p: NSPoint) -> Int? {
         let v = viewPoint(p)
-        return hudView.candidateRects.firstIndex { $0.contains(v) }
+        return hudView.candidateRects.firstIndex { !$0.isEmpty && $0.contains(v) }
     }
 
     func isInSpaceBar(screenPoint p: NSPoint) -> Bool {

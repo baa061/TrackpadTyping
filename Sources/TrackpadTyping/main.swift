@@ -11,6 +11,13 @@ if args.contains("--trace") {
     TraceMode.run(config: config, seconds: seconds)
 }
 
+if args.contains("--ablate") {
+    _ = TrackpadMonitor.shared.start()
+    TrackpadMonitor.shared.stop()
+    SelfTest.ablate(baseConfig: config)
+    exit(0)
+}
+
 if args.contains("--sweep") {
     _ = TrackpadMonitor.shared.start()
     TrackpadMonitor.shared.stop()
@@ -26,6 +33,10 @@ if args.contains("--selftest") {
     let verbose = args.contains("--verbose")
     for noise in [0.20, 0.30, 0.40] {
         SelfTest.run(config: config, sampleSize: 300, noiseKeys: noise, verbose: verbose && noise == 0.30)
+    }
+    for noise in [0.30, 0.45] {
+        SelfTest.run(config: config, sampleSize: 300, noiseKeys: noise, sloppy: true,
+                     verbose: verbose && noise == 0.45)
     }
     exit(0)
 }

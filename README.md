@@ -23,7 +23,8 @@ Move the pointer freely — nothing is decoded until you press.
 | click **and hold**, sweep, release | trace a word |
 | quick click | type the letter under the pointer |
 | two-finger tap | cycle to the next candidate |
-| two-finger swipe left | backspace |
+| two-finger scroll sideways | scroll the suggestion strip |
+| ⌫ right after a glide | erase that whole word |
 | two-finger swipe down | delete the last word |
 | ⇧ key / two-finger swipe up | capitalize the next letter |
 | ' , . ? keys | punctuation — attaches to the word; . and ? arm an auto-capital |
@@ -83,14 +84,26 @@ stretch at 90–92%.
 ## Accuracy
 
 `./.build/release/TrackpadTyping --selftest` scores the decoder on synthesized
-traces (key positions jittered, corners rounded the way a moving hand rounds
-them):
+traces — clean ones (jittered key positions, rounded corners) and *sloppy*
+ones that model how a fast hand actually fails: corner overshoot, mid-path
+wobble, endpoint drift:
 
-| trace noise | top-1 | top-3 |
+| traces | top-1 | top-3 |
 |---|---|---|
-| 0.20 key | 96.7% | 100.0% |
-| 0.30 key | 90.3% | 99.0% |
-| 0.40 key | 86.7% | 97.0% |
+| clean, 0.20 key noise | 89% | 92% |
+| clean, 0.30 key noise | 87% | 92% |
+| sloppy, 0.30 key noise | 78% | 89% |
+| sloppy, 0.45 key noise | 56% | 66% |
+
+Scoring is two-stage: a rigid arc-length pass nominates ~100 finalists, then a
+blended rescore mixes in banded **dynamic time warping** so local slop (a
+wobble, an overshot corner) costs only where it happens instead of shifting
+every later comparison. Rigid correspondence stays in the blend on purpose —
+it encodes *where along the path* each turn falls, which is most of what
+separates similar words; pure DTW measurably destroys clean accuracy. The
+blend (`dtwBlend`), warp band (`dtwBandFraction`), and endpoint tolerance were
+tuned by ablation: versus the rigid-only decoder, sloppy-trace accuracy is up
+~8 points at equal clean top-1.
 
 Remaining misses are genuinely ambiguous short words (`as`/`add`, `out`/`our`)
 — recoverable by candidate cycling, which is why top-3 is the number that
@@ -131,6 +144,8 @@ keyboard size. Useful knobs:
 | `tapMaxTravelKeys` | 0.55 | below this travel a click is a letter, not a word |
 | `maxScoreKeys` | 3.5 | worst acceptable best-candidate score; above it nothing is typed |
 | `fallbackPenaltyKeys` | 1.6 | how strongly non-core dictionary words are disfavoured |
+| `dtwBlend` | 0.75 | elastic vs rigid mix in the rescore; higher forgives more slop |
+| `dtwBandFraction` | 0.08 | how far the elastic alignment may warp |
 | `priorWeightKeys` | 0.07 | strength of the word-frequency prior |
 | `useSystemDictionary` | true | include `/usr/share/dict/words` as fallback coverage |
 | `autoSpace` | true | append a space after each glided word |

@@ -148,6 +148,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         EventTapController.shared.onTraceDown = { [weak self] in self?.beginTrace() }
         EventTapController.shared.onTraceUp = { [weak self] in self?.endTrace() }
         EventTapController.shared.onArrow = { [weak self] dir in self?.arrowCandidate(dir) }
+        EventTapController.shared.onStripScroll = { [weak self] dx in
+            guard let self, self.glideMode else { return }
+            // Natural direction: content follows the fingers.
+            self.hud.hudView.candidateOffset -= CGFloat(dx)
+            self.hud.refresh()
+            self.dumpUIState()
+        }
         let tapOK = EventTapController.shared.start()
 
         Diagnostics.write(multitouch: true,
@@ -293,10 +300,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               Long-press a word chip         — forget a mislearned word
               Click a word in the top bar    — mark it, then glide to replace it
               Click a suggested word, or ←/→ — pick a candidate / completion
-              ⌫ key                          — backspace; hold to delete more
+              ⌫ key                          — backspace; right after a glide it
+                                               removes the whole word; hold for more
               Hold the top grab bar          — move the keyboard
               Two fingers, tap               — cycle to the next candidate
-              Two fingers, swipe left        — backspace
+              Two fingers, scroll sideways   — scroll the suggestions
               Two fingers, swipe down        — delete the last word
               Three fingers, tap             — space
 
@@ -433,13 +441,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if hud.isInDeleteKey(screenPoint: mouse) {
             deleteHeldSince = Date()
             deleteRepeats = 0
+            let midLetterRun = !letterRun.isEmpty
             letterRun = ""
             setCandidates(active: false)
-            pendingReinforce = nil
-            lastCommit = nil          // arbitrary deletion invalidates word-undo
-            erase(1)
-            hud.hudView.deleteActive = true
-            updateHUD(candidates: [], status: "⌫")
+            pendingReinforce = nil    // deleting right after = rejection; never learn it
+
+            // Straight after a glided word, backspace means "that word was
+            // wrong" — remove all of it. Mid letter-run (or with no commit)
+            // it keeps its ordinary one-character meaning.
+            if let commit = lastCommit, !midLetterRun {
+                erase(commit.insertedLength + commit.tail.count)
+                if !commit.tail.isEmpty { inject(commit.tail) }
+                lastCommit = nil
+                hud.hudView.deleteActive = true
+                updateHUD(candidates: [], status: "⌫ word")
+            } else {
+                lastCommit = nil
+                erase(1)
+                hud.hudView.deleteActive = true
+                updateHUD(candidates: [], status: "⌫")
+            }
 
             traceTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
                 guard let self, let since = self.deleteHeldSince else { return }
@@ -609,7 +630,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .multiSwipe(let fingers, let direction):
             guard fingers == 2 else { return }
             switch direction {
-            case .left: backspace()
+            // Horizontal two-finger movement now scrolls the candidate strip
+            // (via scroll events); backspace lives on the ⌫ key.
             case .down: deleteLastWord()
             case .up:
                 shiftPending.toggle()
@@ -1024,6 +1046,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateHUD(candidates: [String], selected: Int = 0, status: String) {
         guard glideMode else { return }
+        if hud.hudView.candidates != candidates { hud.hudView.candidateOffset = 0 }
         hud.hudView.candidates = candidates
         hud.hudView.selectedIndex = selected
         hud.hudView.statusText = status

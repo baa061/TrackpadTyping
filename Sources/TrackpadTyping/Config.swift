@@ -32,12 +32,29 @@ struct Config: Codable {
     /// relative to key size so it keeps its meaning if the keyboard is resized.
     var priorWeightKeys: Double = 0.07
     /// How far from a key centre a glide may start/end and still be considered
-    /// to have begun/ended on that key, in key pitches.
-    var endpointRadiusKeys: Double = 1.35
+    /// to have begun/ended on that key, in key pitches. Generous on purpose:
+    /// sloppy swipes overshoot their first and last keys, and a word pruned
+    /// here can never be recovered by scoring.
+    var endpointRadiusKeys: Double = 1.6
+    /// How many first-pass finalists get the expensive elastic (DTW) rescore.
+    var rescoreCount: Int = 100
+    /// Fraction of the final channel scores taken from elastic (DTW) matching
+    /// versus rigid arc-length correspondence. Rigid encodes where along the
+    /// path each turn happens — the main signal separating similar words —
+    /// while elastic forgives local slop; pure elastic (1.0) measurably
+    /// destroys clean-trace accuracy.
+    var dtwBlend: Double = 0.75
+    /// DTW warp band as a fraction of the resample count. Small on purpose:
+    /// it should absorb local wobble, not whole-path reparameterization.
+    var dtwBandFraction: Double = 0.08
+    /// Emphasize endpoints over mid-path in the distance costs.
+    var endWeighting: Bool = true
+    /// Low-pass passes applied to the raw trace before scoring.
+    var smoothingPasses: Int = 2
     /// Template/path arc-length ratio bounds for a word to stay in the running.
     var lengthRatioMin: Double = 0.35
     var lengthRatioMax: Double = 2.80
-    var candidateCount: Int = 5
+    var candidateCount: Int = 8
     /// A glide whose best score exceeds this (in key pitches) commits nothing.
     /// Real hits score 1-2.5 pitches; a stranded or accidental trace scores an
     /// order of magnitude worse, and typing its "nearest" word would be noise.

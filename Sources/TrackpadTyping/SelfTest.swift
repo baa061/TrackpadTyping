@@ -28,12 +28,42 @@ enum SelfTest {
     static func synthesize(word: String,
                            layout: KeyboardLayout,
                            noiseKeys: Double,
+                           sloppy: Bool = false,
                            rng: inout SeededRNG) -> [Pt]? {
         guard let template = layout.template(for: word) else { return nil }
         let sigma = noiseKeys * layout.keyPitch
 
-        let jittered = template.map { p in
+        var jittered = template.map { p in
             Pt(x: p.x + rng.gaussian(sigma: sigma), y: p.y + rng.gaussian(sigma: sigma))
+        }
+
+        if sloppy {
+            // Sloppiness is not just noise — it has structure. Three real
+            // failure modes of a fast hand:
+            // 1. corner overshoot: momentum carries past a turn, then corrects
+            var overshot: [Pt] = [jittered[0]]
+            for i in 1..<jittered.count {
+                let prev = jittered[i - 1]
+                let cur = jittered[i]
+                overshot.append(cur)
+                if i < jittered.count - 1 {
+                    let dir = cur - prev
+                    let len = dir.length
+                    if len > 1e-6, Double.random(in: 0...1, using: &rng) < 0.5 {
+                        let over = Double.random(in: 0.2...0.6, using: &rng) * layout.keyPitch
+                        overshot.append(cur + dir * (over / len))
+                        overshot.append(cur)
+                    }
+                }
+            }
+            jittered = overshot
+            // 2. endpoint drift: the finger lands/lifts short of or past the key
+            let eSigma = sigma * 1.6
+            jittered[0] = Pt(x: jittered[0].x + rng.gaussian(sigma: eSigma),
+                             y: jittered[0].y + rng.gaussian(sigma: eSigma))
+            let last = jittered.count - 1
+            jittered[last] = Pt(x: jittered[last].x + rng.gaussian(sigma: eSigma),
+                                y: jittered[last].y + rng.gaussian(sigma: eSigma))
         }
 
         // Dense sampling, then repeated smoothing to round the corners the way
@@ -49,6 +79,20 @@ enum SelfTest {
                 dense = out
             }
         }
+        // 3. mid-path wobble: a slow lateral oscillation, worst mid-glide and
+        //    calm near the deliberately-aimed endpoints.
+        if sloppy && dense.count > 4 {
+            let phase = Double.random(in: 0...(2 * .pi), using: &rng)
+            let amp = 0.35 * layout.keyPitch
+            let cycles = Double.random(in: 1.5...3.0, using: &rng)
+            for i in 0..<dense.count {
+                let t = Double(i) / Double(dense.count - 1)
+                let envelope = Foundation.sin(t * .pi)          // 0 at ends, 1 mid
+                let off = amp * envelope * Foundation.sin(phase + t * cycles * 2 * .pi)
+                dense[i] = Pt(x: dense[i].x, y: dense[i].y + off)
+            }
+        }
+
         // Sensor-level jitter on top.
         return dense.map { p in
             Pt(x: p.x + rng.gaussian(sigma: sigma * 0.12),
@@ -56,7 +100,8 @@ enum SelfTest {
         }
     }
 
-    static func run(config: Config, sampleSize: Int = 300, noiseKeys: Double = 0.30, verbose: Bool = false) {
+    static func run(config: Config, sampleSize: Int = 300, noiseKeys: Double = 0.30,
+                    sloppy: Bool = false, verbose: Bool = false) {
         let layout = KeyboardLayout(keyPitch: config.screenKeyPitch, rowPitchRatio: config.rowPitchRatio)
         let t0 = Date()
         let lexicon = Lexicon(config: config)
@@ -78,7 +123,8 @@ enum SelfTest {
         var failures: [(String, [String])] = []
 
         for w in words {
-            guard let path = synthesize(word: w, layout: layout, noiseKeys: noiseKeys, rng: &rng) else { continue }
+            guard let path = synthesize(word: w, layout: layout, noiseKeys: noiseKeys,
+                                        sloppy: sloppy, rng: &rng) else { continue }
             let start = Date()
             let cands = decoder.decode(path: path)
             totalMS += Date().timeIntervalSince(start) * 1000
@@ -91,8 +137,8 @@ enum SelfTest {
         }
 
         guard total > 0 else { print("no test words"); return }
-        print(String(format: "noise %.2f keys | top-1 %.1f%%  top-3 %.1f%%  (n=%d)  mean decode %.1f ms",
-                     noiseKeys,
+        print(String(format: "noise %.2f keys%@ | top-1 %.1f%%  top-3 %.1f%%  (n=%d)  mean decode %.1f ms",
+                     noiseKeys, sloppy ? " SLOPPY" : "",
                      100.0 * Double(top1) / Double(total),
                      100.0 * Double(top3) / Double(total),
                      total, totalMS / Double(total)))
@@ -109,60 +155,140 @@ extension SelfTest {
     /// The lexicon and the synthetic traces are built once and shared: they do
     /// not depend on the weights, and holding them fixed means every cell of
     /// the grid is scored against identical input.
-    static func sweep(baseConfig: Config, sampleSize: Int = 400) {
+    /// Ablation: which of the forgiveness changes actually costs clean
+    /// accuracy? Toggles each independently against both populations.
+    static func ablate(baseConfig: Config, sampleSize: Int = 400) {
+        let layout = KeyboardLayout(keyPitch: baseConfig.screenKeyPitch,
+                                    rowPitchRatio: baseConfig.rowPitchRatio)
+        let lexicon = Lexicon(config: baseConfig)
         var seen = Set<String>()
         let words = CommonWords.ordered.filter { $0.count >= 2 && seen.insert($0).inserted }
                                        .prefix(sampleSize)
+        func makeCases(noise: Double, sloppy: Bool, seed: UInt64) -> [(String, [Pt])] {
+            var rng = SeededRNG(seed: seed)
+            return words.compactMap { w in
+                synthesize(word: w, layout: layout, noiseKeys: noise, sloppy: sloppy, rng: &rng)
+                    .map { (w, $0) }
+            }
+        }
+        let clean = makeCases(noise: 0.20, sloppy: false, seed: 7)
+                  + makeCases(noise: 0.30, sloppy: false, seed: 8)
+        let sloppyC = makeCases(noise: 0.30, sloppy: true, seed: 9)
+                    + makeCases(noise: 0.45, sloppy: true, seed: 10)
+        func score(_ dec: Decoder, _ cases: [(String, [Pt])]) -> (Double, Double) {
+            var t1 = 0, t3 = 0
+            for (want, path) in cases {
+                let names = dec.decode(path: path).map { $0.word }
+                if names.first == want { t1 += 1 }
+                if names.prefix(3).contains(want) { t3 += 1 }
+            }
+            return (100.0 * Double(t1) / Double(cases.count),
+                    100.0 * Double(t3) / Double(cases.count))
+        }
+
+        struct Cell { let name: String; let mut: (inout Config) -> Void }
+        var cells: [Cell] = [
+            Cell(name: "OLD decoder (r1.35 rigid uniform)") {
+                $0.endpointRadiusKeys = 1.35; $0.dtwBlend = 0
+                $0.endWeighting = false; $0.smoothingPasses = 0
+            },
+            Cell(name: "OLD + big rescore pool") {
+                $0.endpointRadiusKeys = 1.35; $0.dtwBlend = 0
+                $0.endWeighting = false; $0.smoothingPasses = 0
+                $0.rescoreCount = 400
+            },
+            Cell(name: "chosen + big rescore pool") { $0.rescoreCount = 400 },
+        ]
+        for blend in [0.5, 0.75, 1.0] {
+            for weights in [true, false] {
+                for smooth in [0, 2] {
+                    cells.append(Cell(name: String(format: "blend%.2f weights=%@ smooth%d",
+                                                   blend, weights ? "on " : "off", smooth)) {
+                        $0.dtwBlend = blend; $0.endWeighting = weights; $0.smoothingPasses = smooth
+                    })
+                }
+            }
+        }
+        var results = [String](repeating: "", count: cells.count)
+        DispatchQueue.concurrentPerform(iterations: cells.count) { i in
+            var cfg = baseConfig
+            cells[i].mut(&cfg)
+            let dec = Decoder(layout: layout, lexicon: lexicon, config: cfg)
+            let c = score(dec, clean), sl = score(dec, sloppyC)
+            results[i] = String(format: "  %-34s clean %.1f/%.1f   sloppy %.1f/%.1f",
+                                (cells[i].name as NSString).utf8String!,
+                                c.0, c.1, sl.0, sl.1)
+        }
+        results.forEach { print($0) }
+    }
+
+    static func sweep(baseConfig: Config, sampleSize: Int = 400) {
+        let layout = KeyboardLayout(keyPitch: baseConfig.screenKeyPitch,
+                                    rowPitchRatio: baseConfig.rowPitchRatio)
         let lexicon = Lexicon(config: baseConfig)
-        let noiseLevels = [0.20, 0.30, 0.40]
 
-        struct Row { let ratio: Double; let loc: Double; let fb: Double; let top1: Double; let top3: Double }
-        var rows: [Row] = []
+        var seen = Set<String>()
+        let words = CommonWords.ordered.filter { $0.count >= 2 && seen.insert($0).inserted }
+                                       .prefix(sampleSize)
 
-        // Row spacing changes the layout, so the synthetic traces have to be
-        // rebuilt for each ratio — they are drawn against the keyboard itself.
-        for ratio in [1.0, 1.2, 1.4, 1.6, 1.9] {
-            let layout = KeyboardLayout(keyPitch: baseConfig.screenKeyPitch, rowPitchRatio: ratio)
-            var cases: [(String, [Pt])] = []
-            for noise in noiseLevels {
-                var rng = SeededRNG(seed: 7)
-                for w in words {
-                    if let p = synthesize(word: w, layout: layout, noiseKeys: noise, rng: &rng) {
-                        cases.append((w, p))
-                    }
-                }
+        // Two test populations, scored separately: tuning must buy sloppy
+        // accuracy without selling clean accuracy.
+        func makeCases(noise: Double, sloppy: Bool, seed: UInt64) -> [(String, [Pt])] {
+            var rng = SeededRNG(seed: seed)
+            return words.compactMap { w in
+                synthesize(word: w, layout: layout, noiseKeys: noise, sloppy: sloppy, rng: &rng)
+                    .map { (w, $0) }
             }
+        }
+        let clean = makeCases(noise: 0.20, sloppy: false, seed: 7)
+                  + makeCases(noise: 0.30, sloppy: false, seed: 8)
+        let sloppy = makeCases(noise: 0.30, sloppy: true, seed: 9)
+                   + makeCases(noise: 0.45, sloppy: true, seed: 10)
+        print("sweep: \(clean.count) clean + \(sloppy.count) sloppy traces\n")
 
-            for loc in [0.7, 1.0, 1.3] {
-                for fb in [0.8, 1.4, 2.2] {
-                    var cfg = baseConfig
-                    cfg.rowPitchRatio = ratio
-                    cfg.locationWeight = loc
-                    cfg.fallbackPenaltyKeys = fb
-                    let dec = Decoder(layout: layout, lexicon: lexicon, config: cfg)
-
-                    var t1 = 0, t3 = 0
-                    for (want, path) in cases {
-                        let names = dec.decode(path: path).map { $0.word }
-                        if names.first == want { t1 += 1 }
-                        if names.prefix(3).contains(want) { t3 += 1 }
-                    }
-                    rows.append(Row(ratio: ratio, loc: loc, fb: fb,
-                                    top1: 100.0 * Double(t1) / Double(cases.count),
-                                    top3: 100.0 * Double(t3) / Double(cases.count)))
-                }
-            }
-            print("  ...ratio \(ratio) done")
+        func top1(_ dec: Decoder, _ cases: [(String, [Pt])]) -> Double {
+            var hit = 0
+            for (want, path) in cases where dec.decode(path: path).first?.word == want { hit += 1 }
+            return 100.0 * Double(hit) / Double(cases.count)
         }
 
-        rows.sort { $0.top1 > $1.top1 }
-        print("\nbest (rowRatio / locWeight / fallbackKeys -> top1, top3):")
-        for r in rows.prefix(10) {
-            print(String(format: "  %.1f  %.2f  %.1f  ->  %.1f%%  %.1f%%", r.ratio, r.loc, r.fb, r.top1, r.top3))
+        struct Row { let blend, band, prior, clean, sloppy: Double }
+        var grid: [(Double, Double, Double)] = []
+        for blend in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            for band in [0.05, 0.08, 0.16] {
+                for prior in [0.04, 0.07] {
+                    grid.append((blend, band, prior))
+                }
+            }
         }
-        print("\nworst:")
-        for r in rows.suffix(3) {
-            print(String(format: "  %.1f  %.2f  %.1f  ->  %.1f%%  %.1f%%", r.ratio, r.loc, r.fb, r.top1, r.top3))
+        // Each cell gets its own Decoder (they cache templates internally);
+        // the lexicon and layout are shared read-only.
+        var rows = [Row?](repeating: nil, count: grid.count)
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: grid.count) { i in
+            let (blend, band, prior) = grid[i]
+            var cfg = baseConfig
+            cfg.dtwBlend = blend
+            cfg.dtwBandFraction = band
+            cfg.priorWeightKeys = prior
+            let dec = Decoder(layout: layout, lexicon: lexicon, config: cfg)
+            let row = Row(blend: blend, band: band, prior: prior,
+                          clean: top1(dec, clean), sloppy: top1(dec, sloppy))
+            lock.lock(); rows[i] = row; lock.unlock()
+        }
+        var done = rows.compactMap { $0 }
+
+        // Rank by sloppy accuracy among configs that keep clean accuracy high.
+        let floor = done.map { $0.clean }.max()! - 2.0
+        done.sort {
+            let aOK = $0.clean >= floor, bOK = $1.clean >= floor
+            if aOK != bOK { return aOK }
+            return $0.sloppy != $1.sloppy ? $0.sloppy > $1.sloppy : $0.clean > $1.clean
+        }
+        print("\nall (blend / bandFrac / prior -> clean top1, sloppy top1):")
+        for r in done {
+            print(String(format: "  %.2f  %.2f  %.2f  ->  %.1f%%  %.1f%%",
+                         r.blend, r.band, r.prior, r.clean, r.sloppy))
         }
     }
 }
