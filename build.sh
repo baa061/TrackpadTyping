@@ -20,12 +20,19 @@ BIN=".build/release/TrackpadTyping"
 # leaves the bundle broken; stop the app first.
 pkill -f "$APP/Contents/MacOS/TrackpadTyping" 2>/dev/null && sleep 1 || true
 
-echo "==> Assembling $APP"
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/TrackpadTyping"
+# This project directory is file-provider synced (Documents/iCloud). The sync
+# daemon stamps extended attributes on files continuously, racing codesign
+# between its detritus check and the seal — the source of every intermittent
+# "resource fork/detritus" failure. Assemble and sign in private tmp space the
+# daemon cannot see, then move the finished bundle into place.
+STAGE="$(mktemp -d)/$APP"
+trap 'rm -rf "$(dirname "$STAGE")"' EXIT
 
-cat > "$APP/Contents/Info.plist" <<PLIST
+echo "==> Assembling $APP (staged)"
+mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
+cp -X "$BIN" "$STAGE/Contents/MacOS/TrackpadTyping"
+
+cat > "$STAGE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -51,33 +58,31 @@ PLIST
 # identifier+certificate and survives rebuilds.
 # Launch Services and Finder decorate bundles with extended attributes that
 # codesign refuses to seal; strip them or signing fails with "detritus".
-xattr -cr "$APP"
+xattr -cr "$STAGE"
 
-IDENTITY="TrackpadTyping Dev"
-if security find-identity -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+# The signing key lives in a dedicated keychain with a stored password and
+# its partition list opened to codesign, so signing never depends on an
+# interactive keychain prompt — the failure mode that used to silently drop
+# builds back to ad-hoc signatures and revoke Accessibility.
+IDENTITY="TrackpadTyping Build"
+KC="$HOME/Library/Keychains/trackpadtyping-build.keychain-db"
+PASSFILE="$HOME/Library/Application Support/TrackpadTyping/build-keychain-pass"
+if [ -f "$PASSFILE" ] && [ -f "$KC" ]; then
+    security unlock-keychain -p "$(cat "$PASSFILE")" "$KC"
     echo "==> Signing ($IDENTITY)"
-    codesign --force --deep --sign "$IDENTITY" "$APP"
+    codesign --force --deep --sign "$IDENTITY" --keychain "$KC" "$STAGE"
 else
     echo "==> Signing (ad hoc — Accessibility will need re-granting after every rebuild)"
-    codesign --force --deep --sign - "$APP"
+    codesign --force --deep --sign - "$STAGE"
 fi
 
-# Signing has intermittently produced a half-written signature (seen when
-# LaunchServices touches the bundle mid-sign). Verify, and re-sign once
-# before letting a broken bundle out the door.
-if ! codesign --verify --deep "$APP" 2>/dev/null; then
-    echo "==> Signature failed verification; re-signing"
-    sleep 1
-    xattr -cr "$APP"
-    codesign --force --deep --sign "$IDENTITY" "$APP" 2>/dev/null \
-        || codesign --force --deep --sign - "$APP"
-    codesign --verify --deep "$APP" || { echo "signing is broken" >&2; exit 1; }
-fi
+codesign --verify --deep "$STAGE" || { echo "signing is broken" >&2; exit 1; }
 
-# Ad-hoc signatures pin the Accessibility grant to the exact binary: the
-# designated requirement is a bare cdhash. Any rebuild therefore revokes
-# permission, and the stale entry stays in the list looking identical to the
-# new one, which is a genuinely confusing failure. Say so explicitly.
+# Only now does the bundle enter synced space, signature already sealed.
+rm -rf "$APP"
+mv "$STAGE" "$APP"
+trap - EXIT
+
 echo
 echo "Built $(pwd)/$APP"
 # Only an ad-hoc signature pins the Accessibility grant to the exact binary;

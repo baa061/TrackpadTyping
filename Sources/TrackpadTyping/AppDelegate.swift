@@ -47,6 +47,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Letters tapped in unbroken succession — the prefix that completion
     /// predictions are offered for. Any other action ends the run.
     private var letterRun = ""
+    /// The run began with a capital; completions that replace it keep it.
+    private var letterRunCapitalized = false
+
+    /// The lexicon's session unit (calendar day) — see Lexicon.currentSession.
+    private var sessionNumber = Lexicon.currentSession()
+    /// The next committed word or tapped letter gets a capital. Armed manually
+    /// with the ⇧ key or a two-finger swipe up, and automatically after
+    /// sentence-ending punctuation.
+    private var shiftPending = false {
+        didSet {
+            hud.hudView.shiftArmed = shiftPending
+            hud.refresh()
+        }
+    }
+    /// Chip under the pointer when the click went down, so release can tell a
+    /// pick (quick) from a long-press (forget the word).
+    private var chipPressed: (word: String, at: Date)? = nil
 
     /// When the last click-held interaction (trace, delete-hold, panel drag)
     /// ended. Physically clicking the trackpad usually means a thumb pressing
@@ -71,6 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private struct Commit {
         var candidates: [String]
         var index: Int
+        /// The commit was typed with a capital; cycling keeps it.
+        var capitalized: Bool = false
         /// Length of the committed word text itself (with any auto-space).
         var insertedLength: Int
         /// Text sitting after the word in the field — non-empty when the word
@@ -111,6 +130,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         setUpStatusItem()
+
+        // The transcript mirrors one text field. When the user switches apps,
+        // that field is gone — word replacement and hold-delete would edit the
+        // wrong text. Reset rather than guess.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main) { [weak self] note in
+            guard let self, self.glideMode else { return }
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            guard app?.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            self.resetTypingContext(status: "app switched — text bar reset")
+        }
 
         EventTapController.shared.suppressClicks = config.suppressClicksWhileTyping
         EventTapController.shared.onHotkey = { [weak self] in self?.toggleGlideMode() }
@@ -257,6 +288,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               Quick click                    — type the letter under the pointer
               Quick click on a bank word     — type that word
               Space bar                      — space; double-tap for “. ”
+              ' , . ? keys                   — punctuation (attaches to the word)
+              ⇧ key or two-finger swipe up   — capitalize the next letter
+              Long-press a word chip         — forget a mislearned word
               Click a word in the top bar    — mark it, then glide to replace it
               Click a suggested word, or ←/→ — pick a candidate / completion
               ⌫ key                          — backspace; hold to delete more
@@ -282,9 +316,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusTitle()
 
         if glideMode {
+            sessionNumber = Lexicon.currentSession()
             lastCommit = nil
             typed = ""
             letterRun = ""
+            shiftPending = false
             clearReplaceTarget()
             lastSpaceTap = nil
             refreshTypedBar()
@@ -381,6 +417,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Record the chip under the press: release decides pick vs long-press.
+        if let idx = hud.candidateIndex(screenPoint: mouse),
+           let commit = lastCommit, commit.candidates.indices.contains(idx) {
+            chipPressed = (commit.candidates[idx], Date())
+        } else if let slot = hud.bankIndex(screenPoint: mouse),
+                  slot < hud.hudView.bankWords.count {
+            chipPressed = (hud.hudView.bankWords[slot], Date())
+        } else {
+            chipPressed = nil
+        }
+
         // Pressing the ⌫ key deletes immediately and then escalates while
         // held: single characters, faster characters, then whole words.
         if hud.isInDeleteKey(screenPoint: mouse) {
@@ -475,8 +522,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A click that barely moved: whichever control it landed on, or
             // failing all of those, the letter key under the pointer.
             let mouseUp = NSEvent.mouseLocation
+            // A long-press on a word chip erases what the lexicon learned
+            // about that word — the escape hatch for reinforced junk.
+            if let chip = chipPressed, Date().timeIntervalSince(chip.at) > 0.7,
+               lexicon.isLearned(chip.word),
+               chipWord(at: mouseUp) == chip.word {
+                lexicon.forget(chip.word)
+                chipPressed = nil
+                lastCommit = nil
+                setCandidates(active: false)
+                refreshBank()
+                updateHUD(candidates: [], status: "forgot “\(chip.word)”")
+                return
+            }
+            chipPressed = nil
             if hud.isInSpaceBar(screenPoint: mouseUp) {
                 spaceBarTapped()
+            } else if let punct = hud.punctuationIndex(screenPoint: mouseUp) {
+                punctuationTapped(punct)
             } else if let range = hud.typedWordRange(screenPoint: mouseUp) {
                 toggleReplaceTarget(range)
             } else if let idx = hud.candidateIndex(screenPoint: mouseUp),
@@ -484,7 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 selectCandidate(idx)
             } else if let slot = hud.bankIndex(screenPoint: NSEvent.mouseLocation),
                slot < hud.hudView.bankWords.count {
-                let word = hud.hudView.bankWords[slot]
+                let word = applyCase(hud.hudView.bankWords[slot])
                 letterRun = ""
                 if let target = replaceRange {
                     _ = performReplace(target: target, with: word)
@@ -492,17 +555,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     injectWordSeparatorIfNeeded()
                     inject(word + (config.autoSpace ? " " : ""))
                 }
-                lexicon.reinforce(word)   // an explicit pick counts as usage
+                lexicon.reinforce(word, session: sessionNumber)   // an explicit pick counts as usage
                 lastCommit = nil
                 updateHUD(candidates: [], status: word)
                 refreshBank()
-            } else if let p = path.last, let ch = decoder.decodeTap(at: p) {
+            } else if let p = path.last, hud.isInKeyArea(screenPoint: mouseUp),
+                      let ch = decoder.decodeTap(at: p) {
                 if let target = replaceRange {
-                    _ = performReplace(target: target, with: String(ch))
+                    let text = applyCase(String(ch))
+                    _ = performReplace(target: target, with: text)
                     lastCommit = nil
-                    updateHUD(candidates: [], status: String(ch))
+                    updateHUD(candidates: [], status: text)
                 } else {
-                    inject(String(ch))
+                    if letterRun.isEmpty { letterRunCapitalized = shiftPending }
+                    inject(applyCase(String(ch)))
                     letterRun.append(ch)
                     offerCompletions()
                 }
@@ -545,6 +611,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch direction {
             case .left: backspace()
             case .down: deleteLastWord()
+            case .up:
+                shiftPending.toggle()
+                lastCommit = nil
+                setCandidates(active: false)
+                updateHUD(candidates: [], status: shiftPending ? "⇧ next letter capitalized" : "")
             default: break
             }
         }
@@ -563,17 +634,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if let target = replaceRange {
-            let tail = performReplace(target: target, with: best.word)
+            let word = applyCase(best.word)
+            let tail = performReplace(target: target, with: word)
             lastCommit = Commit(candidates: candidates.map { $0.word },
                                 index: 0,
-                                insertedLength: best.word.count,
+                                capitalized: word != best.word,
+                                insertedLength: word.count,
                                 tail: tail)
         } else {
             injectWordSeparatorIfNeeded()
-            let text = best.word + (config.autoSpace ? " " : "")
+            let word = applyCase(best.word)
+            let text = word + (config.autoSpace ? " " : "")
             inject(text)
             lastCommit = Commit(candidates: candidates.map { $0.word },
                                 index: 0,
+                                capitalized: word != best.word,
                                 insertedLength: text.count)
         }
         pendingReinforce = best.word
@@ -598,7 +673,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func selectCandidate(_ idx: Int) {
         guard var commit = lastCommit, commit.candidates.indices.contains(idx) else { return }
         commit.index = idx
-        let word = commit.candidates[idx]
+        var word = commit.candidates[idx]
+        if commit.capitalized, let first = word.first {
+            word = String(first).uppercased() + word.dropFirst()
+        }
         let text = commit.tail.isEmpty ? word + (config.autoSpace ? " " : "") : word
 
         erase(commit.insertedLength + commit.tail.count)
@@ -609,6 +687,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         letterRun = ""
         pendingReinforce = word
         updateHUD(candidates: commit.candidates, selected: commit.index, status: word)
+    }
+
+    /// The chip word under a screen point, if any (candidate strip or bank).
+    private func chipWord(at p: NSPoint) -> String? {
+        if let idx = hud.candidateIndex(screenPoint: p),
+           let commit = lastCommit, commit.candidates.indices.contains(idx) {
+            return commit.candidates[idx]
+        }
+        if let slot = hud.bankIndex(screenPoint: p), slot < hud.hudView.bankWords.count {
+            return hud.hudView.bankWords[slot]
+        }
+        return nil
+    }
+
+    /// Drop everything that described the previous text field, and stop any
+    /// interaction still editing it — a delete-hold that survives the focus
+    /// switch would chew through text in the newly focused app.
+    private func resetTypingContext(status: String) {
+        tracing = false
+        dragOffset = nil
+        deleteHeldSince = nil
+        deleteRepeats = 0
+        chipPressed = nil
+        traceTimer?.invalidate()
+        traceTimer = nil
+        hud.hudView.deleteActive = false
+        tracePath = []
+
+        flushReinforcement()
+        typed = ""
+        letterRun = ""
+        lastCommit = nil
+        lastSpaceTap = nil
+        clearReplaceTarget()
+        setCandidates(active: false)
+        refreshTypedBar()
+        updateHUD(candidates: [], status: status)
     }
 
     /// The arrow keys are only diverted from the focused app while this is on.
@@ -664,13 +779,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastCommit = Commit(candidates: [letterRun] + completions,
                             index: 0,
+                            capitalized: letterRunCapitalized,
                             insertedLength: letterRun.count)
         pendingReinforce = nil          // raw letters are not a decoder win
         setCandidates(active: true)
         updateHUD(candidates: lastCommit!.candidates, selected: 0, status: letterRun)
     }
 
+    /// "i" standing alone is always the pronoun; fix it as the word closes.
+    private func fixStandaloneI() {
+        if typed.hasSuffix("i"),
+           typed.count == 1 || typed.dropLast().hasSuffix(" ") {
+            erase(1)
+            inject("I")
+        }
+    }
+
     private func insertSpace() {
+        fixStandaloneI()
         letterRun = ""
         lastCommit = nil
         setCandidates(active: false)
@@ -678,13 +804,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateHUD(candidates: [], status: "space")
     }
 
+    /// A punctuation key: attach the mark to the last word (consuming any
+    /// trailing spaces), reopen spacing after it, and arm the auto-capital
+    /// for sentence enders. The apostrophe is the exception — it splices
+    /// into the word being typed, not after it.
+    private func punctuationTapped(_ index: Int) {
+        flushReinforcement()
+        let label = HUDView.punctuationKeys[index]
+
+        if label == "⇧" {
+            shiftPending.toggle()
+            lastCommit = nil          // the strip is cleared; nothing hidden stays cyclable
+            setCandidates(active: false)
+            updateHUD(candidates: [], status: shiftPending ? "⇧ next letter capitalized" : "")
+            return
+        }
+
+        lastCommit = nil
+        setCandidates(active: false)
+
+        if label == "'" {
+            // Mid-word splice: "don" + ' + "t". The glide path auto-spaces
+            // after "don", so consume trailing spaces or the contraction
+            // becomes "don 't".
+            var trailing = 0
+            for c in typed.reversed() { if c == " " { trailing += 1 } else { break } }
+            erase(trailing)
+            inject("'")
+            letterRun = ""
+            updateHUD(candidates: [], status: "'")
+            return
+        }
+
+        letterRun = ""
+        var trailing = 0
+        for c in typed.reversed() { if c == " " { trailing += 1 } else { break } }
+        erase(trailing)
+        fixStandaloneI()              // after the erase, so "i " is unmasked
+        inject(label + " ")
+        armShiftAfterSentence(label)
+        updateHUD(candidates: [], status: label)
+    }
+
     /// Space, with the double-tap-for-period convention: a second tap in quick
     /// succession converts the just-typed space into ". ".
     private func spaceBarTapped() {
         flushReinforcement()
         let now = Date()
-        if let last = lastSpaceTap, now.timeIntervalSince(last) < 0.45, typed.hasSuffix(" ") {
-            lastSpaceTap = nil
+        let last = lastSpaceTap       // captured before inject/erase clear it
+        if let last, now.timeIntervalSince(last) < 0.45, typed.hasSuffix(" ") {
             lastCommit = nil
             setCandidates(active: false)
             // The word may carry an auto-space plus the first tap's space;
@@ -693,7 +861,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var trailing = 0
             for c in typed.reversed() { if c == " " { trailing += 1 } else { break } }
             erase(trailing)
+            fixStandaloneI()
             inject(". ")
+            armShiftAfterSentence(".")
             updateHUD(candidates: [], status: ". ")
             return
         }
@@ -721,13 +891,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hud.refresh()
     }
 
+    /// Apply and consume the pending capital. Every word/letter entry path
+    /// funnels through this, so shift means the same thing everywhere.
+    private func applyCase(_ word: String) -> String {
+        guard shiftPending, let first = word.first else { return word }
+        shiftPending = false
+        return String(first).uppercased() + word.dropFirst()
+    }
+
+    /// Sentence-ending punctuation arms an automatic capital, phone-style.
+    private func armShiftAfterSentence(_ punct: String) {
+        if punct.contains(".") || punct.contains("?") || punct.contains("!") {
+            shiftPending = true
+        }
+    }
+
     /// A whole word about to be appended needs a space before it unless the
     /// text already ends in one — covers gliding right after a tapped letter
     /// ("a" + "test" must not fuse into "atest") and after punctuation whose
     /// trailing space the user deleted. Injected separately from the word so
     /// candidate cycling never erases it.
     private func injectWordSeparatorIfNeeded() {
-        if let last = typed.last, !last.isWhitespace { inject(" ") }
+        guard let last = typed.last, !last.isWhitespace else { return }
+        // An apostrophe means a word is mid-construction ("don'" + glide "t");
+        // a separator would split the contraction.
+        guard last != "'" else { return }
+        inject(" ")
     }
 
     /// Swap the marked typed-bar word for `word`, preserving everything after
@@ -746,6 +935,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func inject(_ text: String) {
         injector.insert(text)
         typed += text
+        lastSpaceTap = nil            // an edit happened; the next space tap starts fresh
         clearReplaceTarget()
         refreshTypedBar()
     }
@@ -754,6 +944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard n > 0 else { return }
         injector.backspace(n)
         typed = String(typed.dropLast(n))
+        lastSpaceTap = nil
         clearReplaceTarget()
         refreshTypedBar()
     }
@@ -819,7 +1010,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func flushReinforcement() {
         if let w = pendingReinforce {
-            lexicon.reinforce(w)
+            lexicon.reinforce(w, session: sessionNumber)
             refreshBank()
         }
         pendingReinforce = nil

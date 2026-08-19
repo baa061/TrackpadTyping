@@ -40,12 +40,56 @@ final class HUDView: NSView {
                width: CGFloat(layout.width), height: CGFloat(layout.height))
     }
 
-    /// iPhone-style: a wide centred bar in its own row below the letters.
+    /// iPhone-style: a wide centred bar in its own row below the letters,
+    /// with punctuation keys in the side gaps: ⇧ ' , [space] . ?
     var spaceBarRect: NSRect {
         let w = CGFloat(layout.keyPitch) * 5
         return NSRect(x: bounds.midX - w / 2,
                       y: Self.margin + Self.bankHeight + 3,
                       width: w, height: Self.spaceRowHeight - 6)
+    }
+
+    static let punctuationKeys: [String] = ["⇧", "'", ",", ".", "?"]
+
+    func punctuationRect(_ i: Int) -> NSRect {
+        let space = spaceBarRect
+        let y = space.minY
+        let h = space.height
+        let leftWidth = space.minX - padRect.minX
+        let rightWidth = padRect.maxX - space.maxX
+        switch i {
+        case 0, 1, 2:   // ⇧ ' , share the left gap
+            let w = (leftWidth - 8) / 3
+            return NSRect(x: padRect.minX + CGFloat(i) * (w + 3), y: y, width: w, height: h)
+        default:        // . ? share the right gap
+            let w = (rightWidth - 7) / 2
+            return NSRect(x: space.maxX + 4 + CGFloat(i - 3) * (w + 3), y: y, width: w, height: h)
+        }
+    }
+
+    /// Highlights the ⇧ key while the next letter will be capitalized.
+    var shiftArmed = false
+
+    private func drawPunctuation() {
+        for (i, label) in Self.punctuationKeys.enumerated() {
+            let rect = punctuationRect(i)
+            let isShift = (i == 0)
+            if isShift && shiftArmed {
+                NSColor(calibratedRed: 0.24, green: 0.5, blue: 0.95, alpha: 0.9).setFill()
+            } else {
+                NSColor(calibratedWhite: 0.26, alpha: 0.95).setFill()
+            }
+            NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7).fill()
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 14, weight: .medium),
+                .foregroundColor: (isShift && shiftArmed) ? NSColor.white
+                                : NSColor(calibratedWhite: 0.72, alpha: 1),
+            ]
+            let str = NSString(string: label)
+            let size = str.size(withAttributes: attrs)
+            str.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+                     withAttributes: attrs)
+        }
     }
 
     /// Equal-width slots spanning the panel's bottom edge.
@@ -75,6 +119,7 @@ final class HUDView: NSView {
         drawKeys()
         drawDeleteKey(active: deleteActive)
         drawSpaceBar()
+        drawPunctuation()
         drawBank()
         drawTrace()
     }
@@ -409,6 +454,18 @@ final class HUDWindow: NSPanel {
 
     func isInSpaceBar(screenPoint p: NSPoint) -> Bool {
         hudView.spaceBarRect.contains(viewPoint(p))
+    }
+
+    /// True when the point is on the letter-key grid (with a small grace
+    /// margin), so stray taps in gutters don't decode into far-away letters.
+    func isInKeyArea(screenPoint p: NSPoint) -> Bool {
+        keyAreaOnScreen.insetBy(dx: -6, dy: -6).contains(p)
+    }
+
+    /// Index into HUDView.punctuationKeys, or nil.
+    func punctuationIndex(screenPoint p: NSPoint) -> Int? {
+        let v = viewPoint(p)
+        return HUDView.punctuationKeys.indices.first { hudView.punctuationRect($0).contains(v) }
     }
 
     func typedWordRange(screenPoint p: NSPoint) -> Range<Int>? {

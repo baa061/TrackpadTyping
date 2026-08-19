@@ -25,6 +25,9 @@ Move the pointer freely — nothing is decoded until you press.
 | two-finger tap | cycle to the next candidate |
 | two-finger swipe left | backspace |
 | two-finger swipe down | delete the last word |
+| ⇧ key / two-finger swipe up | capitalize the next letter |
+| ' , . ? keys | punctuation — attaches to the word; . and ? arm an auto-capital |
+| long-press a word chip | forget a mislearned word |
 | three-finger tap | space |
 | four-finger tap | toggle glide typing |
 
