@@ -12,14 +12,16 @@ NORMAL USE: click and hold, sweep through a word's letters, release.
 
 JOYSTICK / NO-CLICK USE — click the "hover" button (bottom left) once:
    - Move the pointer freely; nothing happens while you travel.
-   - PAUSE on a word's first letter (a ring fills) — tracing starts.
+   - PAUSE on a word's first letter (a ring fills) — tracing starts and a
+     green dashed line appears above the letters.
    - Sweep through the letters. Stopping mid-word is fine — stops never
      end the word. A short stop on a letter marks it as "definitely this
      letter" when keys are close together.
-   - PUSH UPWARD out of the letter grid — the word types.
+   - PUSH UP PAST THE GREEN LINE — the word types.
    - Hold still on any button (suggestions, space, . ? ! keys, Backspace,
      your five most-used words at the bottom) and the filling ring
-     activates it — no clicking needed anywhere.
+     activates it — no clicking needed anywhere. There is a short pause
+     right after each word before buttons wake up again.
    - Rest on one letter without moving to type just that letter.
 
 TOO FAST OR TOO SLOW? Right-click the tray icon > "Dwell settings..." —

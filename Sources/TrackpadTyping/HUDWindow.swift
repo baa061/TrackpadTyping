@@ -140,6 +140,21 @@ final class HUDView: NSView {
             let b = NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8)
             b.lineWidth = 2.5
             b.stroke()
+            // The finish line: cross it upward and the word types.
+            let y = padRect.maxY + 8
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: padRect.minX + 6, y: y))
+            line.line(to: NSPoint(x: padRect.maxX - 6, y: y))
+            line.setLineDash([6, 4], count: 2, phase: 0)
+            line.lineWidth = 2
+            NSColor(calibratedRed: 0.35, green: 0.8, blue: 0.5, alpha: 0.85).setStroke()
+            line.stroke()
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                .foregroundColor: NSColor(calibratedRed: 0.35, green: 0.8, blue: 0.5, alpha: 0.95),
+            ]
+            NSString(string: "▲ type").draw(at: NSPoint(x: padRect.maxX - 48, y: y + 3),
+                                            withAttributes: attrs)
         }
         drawKeys()
         drawDeleteKey(active: deleteActive)

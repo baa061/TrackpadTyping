@@ -75,6 +75,7 @@ static ULONGLONG g_dwellEngineStart = 0;
 static double g_armStillTotal = -1;
 static double g_dwellProgress = 0;         // 0 hides the ring
 static POINT g_dwellPoint = {0, 0};
+static ULONGLONG g_controlCooldownUntil = 0;
 static double HOVER_START_MS = 450, DWELL_ACTIVATE_MS = 650, HOVER_LETTER_MS = 1100;
 static const double COMMIT_EXIT_BUFFER = 12, PAUSE_MAX_MS = 1200;
 
@@ -495,10 +496,21 @@ static void hoverTick() {
     if (g_hoverTracing) {
         if (moved) {
             g_armStillTotal = -1;
-            g_hoverPath.push_back(toEngine(c));
-            g_hoverDwell.push_back(0);
-            g_tracePath = g_hoverPath;            // reuse live-trace drawing
-            refresh();
+            Pt p = toEngine(c);
+            // The exit swipe is a command, not word geometry.
+            if (p.y <= g_layout->height + 4) {
+                g_hoverPath.push_back(p);
+                g_hoverDwell.push_back(0);
+                if (pathLength(g_hoverPath) > g_layout->keyPitch * 30) {
+                    finishHoverTrace();
+                    g_tracePath.clear();
+                    setStatus(L"trace dropped - swipe up past the line to type");
+                    refresh();
+                    return;
+                }
+                g_tracePath = g_hoverPath;        // reuse live-trace drawing
+                refresh();
+            }
         } else {
             if (!g_hoverDwell.empty()) g_hoverDwell.back() += dt;
             if (g_armStillTotal >= 0) {           // single-letter path
@@ -512,6 +524,7 @@ static void hoverTick() {
                     g_tracePath.clear();
                     char ch = g_decoder->decodeTap(p);
                     if (ch) tapLetter(ch);
+                    g_controlCooldownUntil = GetTickCount64() + 1200;
                     return;
                 }
             }
@@ -519,14 +532,43 @@ static void hoverTick() {
         // spatial commit: exit above the grid (client y smaller = higher)
         RECT ka = keyArea();
         if (c.y < ka.top - (int)COMMIT_EXIT_BUFFER) {
-            auto path = g_hoverPath;
-            auto dwell = g_hoverDwell;
+            auto pathA = g_hoverPath;
+            auto dwellA = g_hoverDwell;
             finishHoverTrace();
             g_tracePath.clear();
-            if (pathLength(path) >= 0.55 * g_layout->keyPitch) {
-                auto [cleaned, emphases] = detectEmphases(path, dwell, *g_layout, g_cfg);
-                commitGlide(cleaned, emphases);
+            // Exit zone: above the top row's key centres is travel, not word.
+            double exitZone = g_layout->height - g_layout->rowPitch * 0.45;
+            while (!pathA.empty() && pathA.back().y > exitZone) {
+                pathA.pop_back(); dwellA.pop_back();
             }
+            if (pathLength(pathA) < 0.55 * g_layout->keyPitch) return;
+
+            // The remaining ascent is ambiguous: exit stroke, or the word's
+            // real final stroke ("hello" ends l->o upward). Decode both
+            // readings; the trimmed one must win by a clear margin.
+            auto pathB = pathA;
+            auto dwellB = dwellA;
+            double removedArc = 0;
+            while (pathB.size() >= 2) {
+                Pt a = pathB[pathB.size()-2], b = pathB.back();
+                double dx = std::fabs(b.x - a.x), dy = b.y - a.y;
+                if (!(dy > 0 && dx < 0.7 * dy && removedArc < g_layout->rowPitch * 3)) break;
+                removedArc += a.dist(b);
+                pathB.pop_back(); dwellB.pop_back();
+            }
+            auto [cleanA, emphA] = detectEmphases(pathA, dwellA, *g_layout, g_cfg);
+            auto candsA = g_decoder->decode(cleanA, emphA);
+            auto bestPath = cleanA; auto bestEmph = emphA;
+            if (pathB.size() < pathA.size() &&
+                pathLength(pathB) >= 0.55 * g_layout->keyPitch) {
+                auto [cleanB, emphB] = detectEmphases(pathB, dwellB, *g_layout, g_cfg);
+                auto candsB = g_decoder->decode(cleanB, emphB);
+                double sa = candsA.empty() ? 1e300 : candsA[0].score;
+                double sb = candsB.empty() ? 1e300 : candsB[0].score;
+                if (sb < sa - g_layout->keyPitch * 0.25) { bestPath = cleanB; bestEmph = emphB; }
+            }
+            commitGlide(bestPath, bestEmph);
+            g_controlCooldownUntil = GetTickCount64() + 1200;
         }
         return;
     }
@@ -563,6 +605,7 @@ static void hoverTick() {
         return;
     }
 
+    if (GetTickCount64() < g_controlCooldownUntil) { g_dwellTargetTime = 0; return; }
     if (g_dwellFired) {
         if (token == "del" && ms >= 500) { g_dwellTargetTime = 0; backspaceViaDwell(); }
         return;
@@ -934,7 +977,7 @@ static void paint(HDC dc) {
         label(r, widen(g_bank[i]), RGB(200,200,206), fSmall);
     }
 
-    // hover-tracing grid tint
+    // hover-tracing grid tint + finish line
     if (g_hoverTracing) {
         RECT kb = keyArea();
         InflateRect(&kb, 3, 3);
@@ -942,8 +985,17 @@ static void paint(HDC dc) {
         HGDIOBJ op = SelectObject(mem, pen);
         HGDIOBJ ob = SelectObject(mem, GetStockObject(NULL_BRUSH));
         RoundRect(mem, kb.left, kb.top, kb.right, kb.bottom, 8, 8);
+        HPEN dash = CreatePen(PS_DOT, 1, RGB(89, 204, 128));
+        SelectObject(mem, dash);
+        int ly = keyArea().top - 8;
+        MoveToEx(mem, kb.left + 4, ly, nullptr);
+        LineTo(mem, kb.right - 4, ly);
         SelectObject(mem, op); SelectObject(mem, ob);
-        DeleteObject(pen);
+        DeleteObject(pen); DeleteObject(dash);
+        HGDIOBJ of2 = SelectObject(mem, fSmall);
+        SetTextColor(mem, RGB(89, 204, 128));
+        TextOutW(mem, kb.right - 60, ly - 18, L"\x25B2 type", 6);
+        SelectObject(mem, of2);
     }
     // dwell progress ring
     if (g_dwellProgress > 0.03) {

@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Time still dwelling on the arming key since tracing was armed — the
     /// single-letter path.
     private var armStillTotal = 0.0
+    /// Controls are dwell-inert until this moment — set after every commit,
+    /// because the exit gesture parks the cursor in the strip and a resting
+    /// cursor would otherwise "pick" whatever chip it happens to cover.
+    private var controlCooldownUntil = Date.distantPast
 
     /// Hold-to-delete state: when the ⌫ key was pressed and how many repeats
     /// have fired, which together drive the escalation schedule.
@@ -818,6 +822,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Post-commit grace: the cursor is resting wherever the exit left
+        // it; controls must not accumulate dwell until the grace passes.
+        // (Arming the next word is exempt — handled above.)
+        if Date() < controlCooldownUntil {
+            dwellTargetTime = 0
+            return
+        }
+
         // ⌫ repeats while dwelled; every other control fires once per entry.
         if dwellTargetFired {
             if token == "del", ms >= 500 {
@@ -860,10 +872,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func tracingTick(p: Pt, screen: NSPoint, moved: Bool, dt: Double) {
         if moved {
             armStillTotal = -1        // swept: the single-letter path is off
-            hoverPath.append(p)
-            hoverDwell.append(0)
-            hud.hudView.livePath = hoverPath
-            hud.refresh()
+            // The exit swipe is a command, not word geometry: recording it
+            // would bolt a fake vertical stroke onto every word and drag its
+            // ending toward the top row ("hands" decoding as "hacksaw").
+            if p.y <= layout.height + 4 {
+                hoverPath.append(p)
+                hoverDwell.append(0)
+                // Runaway guard: nobody's word is 30 key-widths of ink. The
+                // user missed the finish line and wandered on — keeping this
+                // would fuse two words into one blob ("on"+"hello" decoding
+                // as "overhaul"). Drop it and say how to finish next time.
+                if Geometry.pathLength(hoverPath) > layout.keyPitch * 30 {
+                    finishHoverTrace()
+                    updateHUD(candidates: [],
+                              status: "trace dropped — swipe up past the green line to type")
+                    return
+                }
+                hud.hudView.livePath = hoverPath
+                hud.refresh()
+            }
         } else {
             if !hoverDwell.isEmpty { hoverDwell[hoverDwell.count - 1] += dt }
             // Still on the arming key with no sweep yet: single-letter dwell.
@@ -874,6 +901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if armStillTotal * 1000 >= config.hoverLetterDwellMS {
                     finishHoverTrace()
                     if let ch = decoder.decodeTap(at: p) { tapLetter(ch) }
+                    controlCooldownUntil = Date().addingTimeInterval(1.2)
                     return
                 }
             }
@@ -882,16 +910,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Spatial commit: the cursor left the letter grid upward.
         let ka = hud.keyAreaOnScreen
         if screen.y > ka.maxY + CGFloat(config.commitExitBufferPt) {
-            let path = hoverPath
-            let dwell = hoverDwell
+            var pathA = hoverPath
+            var dwellA = hoverDwell
+            // Shed the exit zone — anything above the top row's key centres
+            // is exit travel, never word. A genuine top-row ending ("hello")
+            // then terminates exactly at its key.
+            let exitZone = layout.height - layout.rowPitch * 0.45
+            while let last = pathA.last, last.y > exitZone {
+                pathA.removeLast()
+                dwellA.removeLast()
+            }
             finishHoverTrace()
-            guard Geometry.pathLength(path) >= config.tapMaxTravelKeys * layout.keyPitch else {
+            guard Geometry.pathLength(pathA) >= config.tapMaxTravelKeys * layout.keyPitch else {
                 updateHUD(candidates: [], status: "")
                 return
             }
-            let (cleaned, emphases) = EmphasisDetector.detect(
-                path: path, dwell: dwell, layout: layout, config: config)
-            commitGlide(path: cleaned, emphases: emphases)
+            // The exit stroke crosses the grid's upper rows on its way out,
+            // and whether that ascent is exit or the word's real final stroke
+            // ("hello" genuinely ends l→o upward) cannot be decided from
+            // geometry alone. So decode both readings — ascent kept, ascent
+            // trimmed — and let the scorer choose: the wrong reading scores
+            // like the junk it is.
+            var pathB = pathA
+            var dwellB = dwellA
+            var removedArc = 0.0
+            while pathB.count >= 2 {
+                let a = pathB[pathB.count - 2], b = pathB[pathB.count - 1]
+                let dx = abs(b.x - a.x), dy = b.y - a.y
+                guard dy > 0, dx < 0.7 * dy,
+                      removedArc < layout.rowPitch * 3 else { break }
+                removedArc += a.distance(to: b)
+                pathB.removeLast()
+                dwellB.removeLast()
+            }
+
+            let (cleanA, emphA) = EmphasisDetector.detect(
+                path: pathA, dwell: dwellA, layout: layout, config: config)
+            let candsA = decoder.decode(path: cleanA, emphases: emphA)
+            var bestPath = cleanA
+            var bestEmph = emphA
+            if pathB.count < pathA.count,
+               Geometry.pathLength(pathB) >= config.tapMaxTravelKeys * layout.keyPitch {
+                let (cleanB, emphB) = EmphasisDetector.detect(
+                    path: pathB, dwell: dwellB, layout: layout, config: config)
+                let candsB = decoder.decode(path: cleanB, emphases: emphB)
+                let scoreA = candsA.first?.score ?? .infinity
+                let scoreB = candsB.first?.score ?? .infinity
+                // B is the more aggressively cleaned reading, which flatters
+                // any word's score — it must win by a real margin, not a nose.
+                if scoreB < scoreA - layout.keyPitch * 0.25 {
+                    bestPath = cleanB
+                    bestEmph = emphB
+                }
+            }
+            commitGlide(path: bestPath, emphases: bestEmph)
+            controlCooldownUntil = Date().addingTimeInterval(1.2)
         }
     }
 
