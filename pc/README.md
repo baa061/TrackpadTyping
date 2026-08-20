@@ -5,6 +5,14 @@ always-on-top keyboard panel, the mouse pointer as the input, and
 press-and-hold-click to trace a word. Text is typed into whatever window has
 focus.
 
+## Ready-made build
+
+`dist/TrackpadTyping-windows.zip` contains a prebuilt, statically-linked
+64-bit `TrackpadTyping.exe` (cross-compiled with mingw-w64) plus the lexicon
+and a plain-English README — send that zip, unzip, double-click the exe.
+Windows SmartScreen may warn on first run because the exe is unsigned; choose
+"More info → Run anyway".
+
 ## Build
 
 Easiest: double-click **build.bat** (it finds your compiler and puts the
