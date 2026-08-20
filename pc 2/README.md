@@ -7,8 +7,7 @@ focus.
 
 ## Build
 
-Easiest: double-click **build.bat** (it finds your compiler and puts the
-lexicon in place). Manual equivalents, from this `pc/` folder:
+Needs any C++17 compiler. From this `pc/` folder:
 
 **Visual Studio** (x64 Native Tools Command Prompt):
 ```
