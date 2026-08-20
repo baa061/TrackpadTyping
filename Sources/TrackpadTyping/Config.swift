@@ -7,7 +7,7 @@ struct Config: Codable {
     // Layout ---------------------------------------------------------------
     /// Size of one key on screen, in points. This sets the size of the whole
     /// keyboard panel: ten keys across, three rows down.
-    var screenKeyPitch: Double = 44
+    var screenKeyPitch: Double = 40
     /// Row spacing as a multiple of key width. Taller rows measurably cut
     /// row-confusion errors (the decoder's dominant failure mode); 1.6 is the
     /// sweep's sweet spot between accuracy and screen space.
@@ -51,6 +51,20 @@ struct Config: Codable {
     var endWeighting: Bool = true
     /// Low-pass passes applied to the raw trace before scoring.
     var smoothingPasses: Int = 2
+
+    // Emphasis (pause / loop over a letter) --------------------------------
+    /// Dwelling at least this long over one spot mid-trace marks the letter
+    /// under it as an intentional choice.
+    var pauseMinMS: Double = 180
+    /// Total winding (radians) for a closed excursion to count as a loop.
+    var loopMinTurn: Double = 5.0
+    /// How close (key pitches) an emphasis must be to a key centre to bind.
+    var emphasisRadiusKeys: Double = 0.8
+    /// Penalty (key pitches) for a candidate lacking an emphasized letter
+    /// near the emphasized position.
+    var emphasisMissPenaltyKeys: Double = 1.5
+    /// Tolerance on the emphasized letter's position along the word (0..1).
+    var emphasisPositionTolerance: Double = 0.30
     /// Template/path arc-length ratio bounds for a word to stay in the running.
     var lengthRatioMin: Double = 0.35
     var lengthRatioMax: Double = 2.80

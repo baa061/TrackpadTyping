@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// own timer rather than from multitouch frames so the path keeps recording
     /// even through momentary sensor dropouts mid-click.
     private var tracePath: [Pt] = []
+    /// Seconds the cursor dwelt at each trace point before moving on — the
+    /// signal that distinguishes a deliberate pause from passing through.
+    private var traceDwell: [Double] = []
     private var traceTimer: Timer?
     private var tracing = false
 
@@ -356,6 +359,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             flushReinforcement()
             tracing = false
+            tracePath = []
+            traceDwell = []
             dragOffset = nil
             deleteHeldSince = nil
             hud.hudView.deleteActive = false
@@ -489,16 +494,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setCandidates(active: false)
         tracing = true
         tracePath = [hud.toLayout(screenPoint: NSEvent.mouseLocation)]
+        traceDwell = [0]
 
         traceTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
             guard let self, self.tracing else { return }
             let p = self.hud.toLayout(screenPoint: NSEvent.mouseLocation)
-            // Skip near-duplicates: a paused cursor would otherwise pack the
-            // path with points and bias resampling toward the hesitation.
+            // A stationary cursor accumulates dwell on the last point instead
+            // of duplicate points: geometry stays clean, and the dwell is what
+            // pause-emphasis detection reads.
             if self.tracePath.last.map({ $0.distance(to: p) > 0.5 }) ?? true {
                 self.tracePath.append(p)
+                self.traceDwell.append(0)
                 self.hud.hudView.livePath = self.tracePath
                 self.hud.refresh()
+            } else if !self.traceDwell.isEmpty {
+                self.traceDwell[self.traceDwell.count - 1] += 1.0 / 120.0
             }
         }
     }
@@ -536,7 +546,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         traceTimer = nil
 
         let path = tracePath
+        let dwell = traceDwell
         tracePath = []
+        traceDwell = []
         flushReinforcement()
 
         if Geometry.pathLength(path) < config.tapMaxTravelKeys * layout.keyPitch {
@@ -595,7 +607,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         } else {
-            commitGlide(path: path)
+            let (cleaned, emphases) = EmphasisDetector.detect(
+                path: path, dwell: dwell, layout: layout, config: config)
+            commitGlide(path: cleaned, emphases: emphases)
         }
     }
 
@@ -643,9 +657,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func commitGlide(path: [Pt]) {
+    private func commitGlide(path: [Pt], emphases: [Emphasis] = []) {
         letterRun = ""
-        let candidates = decoder.decode(path: path)
+        let candidates = decoder.decode(path: path, emphases: emphases)
         guard let best = candidates.first,
               best.score <= config.maxScoreKeys * layout.keyPitch else {
             // Typing the least-bad word from an unrecognizable trace would be

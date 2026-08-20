@@ -32,6 +32,9 @@ final class Decoder {
     private var locationCache: [Int: [Pt]] = [:]
     private var shapeCache: [Int: [Pt]] = [:]
     private var templateLength: [Int: Double] = [:]
+    /// Each template letter with its fraction along the word's arc length,
+    /// for matching emphasized letters positionally.
+    private var letterPositions: [Int: [(Character, Double)]] = [:]
     private let cacheLimit = 60_000
 
     /// Size that shape-normalized paths are scaled to. Arbitrary, but it sets
@@ -60,12 +63,29 @@ final class Decoder {
             locationCache.removeAll(keepingCapacity: true)
             shapeCache.removeAll(keepingCapacity: true)
             templateLength.removeAll(keepingCapacity: true)
+            letterPositions.removeAll(keepingCapacity: true)
         }
         guard let poly = layout.template(for: lexicon.words[idx]) else { return false }
         let resampled = Geometry.resample(poly, to: config.resampleCount)
         locationCache[idx] = resampled
         shapeCache[idx] = Geometry.normalizeShape(resampled, size: shapeNormSize)
-        templateLength[idx] = Geometry.pathLength(poly)
+        let total = Geometry.pathLength(poly)
+        templateLength[idx] = total
+
+        // Letter arc fractions (repeats collapsed, mirroring template(for:)).
+        var positions: [(Character, Double)] = []
+        var acc = 0.0
+        var last: Character? = nil
+        var vertex = 0
+        for ch in lexicon.words[idx] {
+            if ch != last {
+                if vertex > 0 { acc += poly[vertex].distance(to: poly[vertex - 1]) }
+                positions.append((ch, total > 1e-9 ? acc / total : 0))
+                vertex += 1
+            }
+            last = ch
+        }
+        letterPositions[idx] = positions
         return true
     }
 
@@ -149,8 +169,13 @@ final class Decoder {
         return dtwPrev[m] / Double(n)
     }
 
-    /// - Parameter path: the traced path in layout-local coordinates.
-    func decode(path rawPath: [Pt]) -> [Candidate] {
+    /// - Parameters:
+    ///   - path: the traced path in layout-local coordinates.
+    ///   - emphases: letters the user deliberately marked (pause or loop),
+    ///     with their positions along the trace. A candidate that cannot
+    ///     account for an emphasized letter near its position is penalized —
+    ///     these are the strongest intent signals a trace carries.
+    func decode(path rawPath: [Pt], emphases: [Emphasis] = []) -> [Candidate] {
         guard rawPath.count >= 2 else { return [] }
 
         let smoothed = Self.smooth(rawPath, passes: config.smoothingPasses)
@@ -189,8 +214,18 @@ final class Decoder {
 
             let shape = weightedPointDistance(userShape, tShape)
             let location = weightedPointDistance(userLoc, tLoc)
-            let priorPenalty = -lexicon.logPrior[idx] * priorScale
+            var priorPenalty = -lexicon.logPrior[idx] * priorScale
                              + (lexicon.isCore[idx] ? 0 : fallbackPenalty)
+            if !emphases.isEmpty, let letters = letterPositions[idx] {
+                for e in emphases {
+                    let matched = letters.contains {
+                        $0.0 == e.letter && abs($0.1 - e.t) <= config.emphasisPositionTolerance
+                    }
+                    if !matched {
+                        priorPenalty += config.emphasisMissPenaltyKeys * layout.keyPitch
+                    }
+                }
+            }
 
             firstPass.append((idx, priorPenalty, shape, location,
                               shape * config.shapeWeight
@@ -229,4 +264,122 @@ final class Decoder {
 
     /// A contact that barely moved is a single key press, not a word.
     func decodeTap(at p: Pt) -> Character? { layout.nearestLetter(to: p) }
+}
+
+/// One deliberately-marked letter in a trace: the user paused on it or drew a
+/// loop over it. `t` is its fraction along the trace's arc length.
+struct Emphasis {
+    let letter: Character
+    let t: Double
+}
+
+/// Turns dwell and winding in a raw trace into letter emphases.
+///
+/// Pure function of (points, per-point dwell) so it is directly testable from
+/// the command line — the interactive layer just feeds it the live trace.
+enum EmphasisDetector {
+    /// - Parameter dwell: seconds the cursor sat at each point before moving on.
+    /// - Returns: the path with loop excursions excised (a loop's geometry is
+    ///   deliberate emphasis, not word shape — leaving the bulge in would
+    ///   penalize exactly the word the user was trying to indicate), plus the
+    ///   deduplicated emphases with their positions along the cleaned path.
+    static func detect(path: [Pt], dwell: [Double], layout: KeyboardLayout,
+                       config: Config) -> (cleaned: [Pt], emphases: [Emphasis]) {
+        guard path.count >= 3, path.count == dwell.count else { return (path, []) }
+        let pitch = layout.keyPitch
+        let bindRadius = config.emphasisRadiusKeys * pitch
+
+        // --- loops: windows of large accumulated turning that close on
+        // themselves within a bounded arc length.
+        var arc = [0.0]
+        for i in 1..<path.count { arc.append(arc[i-1] + path[i].distance(to: path[i-1])) }
+        let totalArc = max(arc.last!, 1e-9)
+
+        var turnPrefix = [0.0, 0.0]   // turnPrefix[k] = winding up to segment k
+        for k in 1..<(path.count - 1) {
+            let v1 = path[k] - path[k-1]
+            let v2 = path[k+1] - path[k]
+            var a = 0.0
+            if v1.length > 1e-9 && v2.length > 1e-9 {
+                a = atan2(v1.x * v2.y - v1.y * v2.x, v1.x * v2.x + v1.y * v2.y)
+            }
+            turnPrefix.append(turnPrefix.last! + a)
+        }
+
+        struct Window { let lo: Int; let hi: Int; let center: Pt; let t: Double }
+        var loops: [Window] = []
+        var i = 1
+        while i < path.count - 2 {
+            var j = i + 2
+            var found = false
+            while j < path.count - 1, arc[j] - arc[i] < pitch * 4.0 {
+                let turn = abs(turnPrefix[min(j + 1, turnPrefix.count - 1)] - turnPrefix[i + 1])
+                if turn >= config.loopMinTurn, path[i].distance(to: path[j]) < pitch * 0.6 {
+                    var cx = 0.0, cy = 0.0
+                    for k in i...j { cx += path[k].x; cy += path[k].y }
+                    let c = Pt(x: cx / Double(j - i + 1), y: cy / Double(j - i + 1))
+                    loops.append(Window(lo: i, hi: j, center: c,
+                                        t: (arc[i] + arc[j]) / 2 / totalArc))
+                    i = j          // never let one excursion yield two loops
+                    found = true
+                    break
+                }
+                j += 1
+            }
+            i += found ? 1 : 1
+        }
+
+        // --- pauses: interior points the cursor dwelt on. Endpoints are
+        // excluded: aiming before the press and settling before release are
+        // not emphasis, and endpoints already dominate candidate selection.
+        struct Mark { let letter: Character; let t: Double; let fromLoop: Bool }
+        var marks: [Mark] = []
+        for w in loops {
+            if let ch = layout.nearestLetter(to: w.center),
+               layout.center(of: ch).map({ $0.distance(to: w.center) <= bindRadius }) == true {
+                marks.append(Mark(letter: ch, t: w.t, fromLoop: true))
+            }
+        }
+        for k in 2..<(path.count - 2) where dwell[k] * 1000 >= config.pauseMinMS {
+            if let ch = layout.nearestLetter(to: path[k]),
+               layout.center(of: ch).map({ $0.distance(to: path[k]) <= bindRadius }) == true {
+                marks.append(Mark(letter: ch, t: arc[k] / totalArc, fromLoop: false))
+            }
+        }
+
+        // --- dedup: one gesture, one emphasis. A loop usually includes a
+        // slowdown, and a long pause spans several samples; same letter at
+        // nearly the same position collapses to a single mark.
+        marks.sort { $0.t < $1.t }
+        var emphases: [Emphasis] = []
+        for m in marks {
+            // One gesture, one emphasis: a loop's own winding can register in
+            // two windows, and its slowdown doubles as a pause. Any same-letter
+            // mark within the matching tolerance is the same intent. (A word
+            // genuinely containing the letter twice — "banana" — keeps both:
+            // its positions sit further apart than the tolerance.)
+            if emphases.contains(where: { $0.letter == m.letter
+                    && abs($0.t - m.t) < config.emphasisPositionTolerance }) {
+                continue
+            }
+            emphases.append(Emphasis(letter: m.letter, t: m.t))
+        }
+
+        // --- excise loop excursions from the geometry.
+        guard !loops.isEmpty else { return (path, emphases) }
+        var cleaned: [Pt] = []
+        var k = 0
+        var li = 0
+        while k < path.count {
+            if li < loops.count && k == loops[li].lo {
+                cleaned.append(loops[li].center)
+                k = loops[li].hi + 1
+                li += 1
+            } else {
+                cleaned.append(path[k])
+                k += 1
+            }
+        }
+        return (cleaned, emphases)
+    }
 }
