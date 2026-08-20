@@ -127,7 +127,10 @@ struct KeyboardLayout {
         char last = 0;
         for (char ch : w) {
             auto it = keys.find(ch);
-            if (it == keys.end()) return false;
+            if (it == keys.end()) {
+                if (ch == '\'') continue;          // apostrophes are silent
+                return false;
+            }
             if (ch != last) out.push_back(it->second);
             last = ch;
         }
@@ -149,7 +152,18 @@ struct Config {
     double dtwBlend = 0.75, dtwBandFraction = 0.08;
     bool endWeighting = true;
     int smoothingPasses = 2;
+    double midFallbackPenaltyKeys = 0.4;   // real corpus words beyond core
+    double endpointAnchorWeight = 0.3;     // raw first/last point distances
+    double pauseMinMS = 180, pauseMaxMS = 1200;
+    double loopMinTurn = 5.0;
+    double emphasisRadiusKeys = 0.8;
+    double emphasisMissPenaltyKeys = 1.5;
+    double emphasisPositionTolerance = 0.30;
 };
+
+/// One deliberately-marked letter in a trace (pause or loop), with its
+/// fraction along the trace's arc length.
+struct Emphasis { char letter; double t; };
 
 // ----------------------------------------------------------------- lexicon --
 struct LearnedWord { int count = 0, sessions = 0, lastSession = -1; double lastUsed = 0; };
@@ -159,6 +173,7 @@ public:
     std::vector<std::string> words;
     std::vector<double> logPrior, basePrior;
     std::vector<bool> isCore, baseCore;
+    std::vector<bool> isMidTier;
 
     // corpusPath: frequency-ordered word list (one per line).
     // curated: always-core supplement. dictionary: vouches ranks 3000-9000.
@@ -172,11 +187,29 @@ public:
         std::ifstream f(corpusPath);
         std::string w;
         while (std::getline(f, w)) {
+            if (!w.empty() && w.back() == '\r') w.pop_back();   // windows line endings
             if (w.empty() || indexOf.count(w)) continue;
             bool core = rank < 3000 || (rank < 9000 && dictionary.count(w)) || curatedSet.count(w);
-            add(w, rank, core);
+            add(w, rank, core, !core);
             rank += 1;
         }
+        // Contractions: subtitle tokenizers split them apart, so none survive
+        // corpus cleaning. Glide templates skip their apostrophes.
+        static const std::pair<const char*, double> contractions[] = {
+            {"i'm",40},{"it's",45},{"don't",55},{"that's",80},{"you're",90},
+            {"can't",110},{"i'll",120},{"i've",140},{"he's",150},{"she's",160},
+            {"we're",170},{"what's",180},{"didn't",190},{"there's",210},
+            {"let's",230},{"i'd",250},{"they're",270},{"doesn't",290},
+            {"isn't",320},{"won't",340},{"you'll",360},{"we'll",380},
+            {"wasn't",400},{"you've",420},{"he'll",480},{"wouldn't",500},
+            {"couldn't",520},{"aren't",560},{"we've",580},{"haven't",600},
+            {"shouldn't",650},{"weren't",670},{"hasn't",720},{"they'll",760},
+            {"you'd",800},{"they've",840},{"she'll",880},{"hadn't",920},
+            {"who's",960},{"ain't",1000},{"here's",1100},{"it'll",1150},
+            {"that'll",1200},{"would've",1300},{"could've",1400},{"should've",1500},
+        };
+        for (auto& [cw, r] : contractions)
+            if (!indexOf.count(cw)) add(cw, r, true);
         for (auto& cw : curated)
             if (!indexOf.count(cw)) add(cw, rank++, true);
         for (auto& dw : dictionary)
@@ -215,7 +248,7 @@ public:
         std::string w = lower(word);
         if (w.size() < 2 || w.size() > 20 || indexOf.count(w)) return;
         for (char c : w) if (c < 'a' || c > 'z') return;
-        add(w, config.fallbackRank, false);
+        add(w, config.fallbackRank, false, false);
         reinforce(w, session, now);
     }
 
@@ -291,7 +324,7 @@ private:
         return s;
     }
 
-    void add(const std::string& w, double rank, bool core) {
+    void add(const std::string& w, double rank, bool core, bool midTier = false) {
         char f = w.front(), l = w.back();
         if (f < 'a' || f > 'z' || l < 'a' || l > 'z') return;
         int idx = (int)words.size();
@@ -301,6 +334,7 @@ private:
         basePrior.push_back(prior);
         isCore.push_back(core);
         baseCore.push_back(core);
+        isMidTier.push_back(midTier);
         buckets[(f - 'a') * 26 + (l - 'a')].push_back(idx);
         indexOf[w] = idx;
     }
@@ -334,7 +368,8 @@ public:
             }
     }
 
-    std::vector<Candidate> decode(const std::vector<Pt>& rawPath) {
+    std::vector<Candidate> decode(const std::vector<Pt>& rawPath,
+                                  const std::vector<Emphasis>& emphases = {}) {
         if (rawPath.size() < 2) return {};
         auto smoothed = smooth(rawPath, config.smoothingPasses);
         auto userLoc = resample(smoothed, config.resampleCount);
@@ -359,8 +394,29 @@ public:
 
             double shape = wDist(userShape, tmplShape[idx]);
             double location = wDist(userLoc, tmplLoc[idx]);
-            double prior = -lexicon.logPrior[idx] * priorScale
-                         + (lexicon.isCore[idx] ? 0 : fallbackPenalty);
+            double prior = -lexicon.logPrior[idx] * priorScale;
+            if (!lexicon.isCore[idx])
+                prior += lexicon.isMidTier[idx]
+                       ? config.midFallbackPenaltyKeys * layout.keyPitch
+                       : fallbackPenalty;
+            // endpoint anchor: elastic matching may not warp away where the
+            // trace began and ended
+            prior += config.endpointAnchorWeight
+                   * (userLoc.front().dist(tmplLoc[idx].front())
+                      + userLoc.back().dist(tmplLoc[idx].back()));
+            // emphasized letters must appear near their marked positions
+            if (!emphases.empty()) {
+                for (auto& e : emphases) {
+                    bool matched = false;
+                    for (auto& [ch, t] : tmplLetters[idx])
+                        if (ch == e.letter &&
+                            std::fabs(t - e.t) <= config.emphasisPositionTolerance) {
+                            matched = true; break;
+                        }
+                    if (!matched)
+                        prior += config.emphasisMissPenaltyKeys * layout.keyPitch;
+                }
+            }
             firstPass.push_back({idx, prior, shape, location,
                                  shape * config.shapeWeight + location * config.locationWeight + prior});
         }
@@ -395,6 +451,7 @@ private:
     std::vector<double> posW;
     std::unordered_map<int, std::vector<Pt>> tmplLoc, tmplShape;
     std::unordered_map<int, double> tmplLen;
+    std::unordered_map<int, std::vector<std::pair<char, double>>> tmplLetters;
     std::vector<double> dtwPrev, dtwCur;
 
     static std::vector<Pt> smooth(std::vector<Pt> cur, int passes) {
@@ -416,7 +473,21 @@ private:
         auto rs = resample(poly, config.resampleCount);
         tmplLoc[idx] = rs;
         tmplShape[idx] = normalizeShape(rs, shapeNormSize);
-        tmplLen[idx] = pathLength(poly);
+        double total = pathLength(poly);
+        tmplLen[idx] = total;
+        // letter arc fractions, repeats collapsed, apostrophes silent
+        std::vector<std::pair<char, double>> positions;
+        double acc = 0; char last = 0; size_t vertex = 0;
+        for (char ch : lexicon.words[idx]) {
+            if (!layout.keys.count(ch)) continue;
+            if (ch != last) {
+                if (vertex > 0) acc += poly[vertex].dist(poly[vertex - 1]);
+                positions.push_back({ch, total > 1e-9 ? acc / total : 0});
+                vertex++;
+            }
+            last = ch;
+        }
+        tmplLetters[idx] = positions;
         return true;
     }
 
@@ -451,5 +522,89 @@ private:
         return dtwPrev[m] / n;
     }
 };
+
+// Turns dwell and winding in a raw trace into letter emphases (see the Swift
+// original). Returns the path with loop excursions excised plus deduplicated
+// emphases.
+inline std::pair<std::vector<Pt>, std::vector<Emphasis>>
+detectEmphases(const std::vector<Pt>& path, const std::vector<double>& dwell,
+               const KeyboardLayout& layout, const Config& config) {
+    if (path.size() < 3 || path.size() != dwell.size()) return {path, {}};
+    double pitch = layout.keyPitch;
+    double bindRadius = config.emphasisRadiusKeys * pitch;
+
+    std::vector<double> arc{0};
+    for (size_t i = 1; i < path.size(); i++) arc.push_back(arc[i-1] + path[i].dist(path[i-1]));
+    double totalArc = std::max(arc.back(), 1e-9);
+
+    std::vector<double> turnPrefix{0, 0};
+    for (size_t k = 1; k + 1 < path.size(); k++) {
+        Pt v1 = path[k] - path[k-1], v2 = path[k+1] - path[k];
+        double a = 0;
+        if (v1.length() > 1e-9 && v2.length() > 1e-9)
+            a = std::atan2(v1.x * v2.y - v1.y * v2.x, v1.x * v2.x + v1.y * v2.y);
+        turnPrefix.push_back(turnPrefix.back() + a);
+    }
+
+    struct Window { size_t lo, hi; Pt center; double t; };
+    std::vector<Window> loops;
+    size_t i = 1;
+    while (i + 2 < path.size()) {
+        size_t j = i + 2;
+        bool found = false;
+        while (j + 1 < path.size() && arc[j] - arc[i] < pitch * 4.0) {
+            double turn = std::fabs(turnPrefix[std::min(j + 1, turnPrefix.size() - 1)] - turnPrefix[i + 1]);
+            if (turn >= config.loopMinTurn && path[i].dist(path[j]) < pitch * 0.6) {
+                Pt c;
+                for (size_t k = i; k <= j; k++) { c.x += path[k].x; c.y += path[k].y; }
+                c.x /= (j - i + 1); c.y /= (j - i + 1);
+                loops.push_back({i, j, c, (arc[i] + arc[j]) / 2 / totalArc});
+                i = j;
+                found = true;
+                break;
+            }
+            j++;
+        }
+        i += 1;
+        (void)found;
+    }
+
+    struct Mark { char letter; double t; };
+    std::vector<Mark> marks;
+    auto bind = [&](const Pt& p) -> char {
+        char ch = layout.nearestLetter(p);
+        if (ch && layout.keys.at(ch).dist(p) <= bindRadius) return ch;
+        return 0;
+    };
+    for (auto& w : loops)
+        if (char ch = bind(w.center)) marks.push_back({ch, w.t});
+    for (size_t k = 2; k + 2 < path.size(); k++) {
+        double ms = dwell[k] * 1000;
+        if (ms >= config.pauseMinMS && ms <= config.pauseMaxMS)
+            if (char ch = bind(path[k])) marks.push_back({ch, arc[k] / totalArc});
+    }
+
+    std::sort(marks.begin(), marks.end(), [](const Mark& a, const Mark& b) { return a.t < b.t; });
+    std::vector<Emphasis> emphases;
+    for (auto& m : marks) {
+        bool dup = false;
+        for (auto& e : emphases)
+            if (e.letter == m.letter && std::fabs(e.t - m.t) < config.emphasisPositionTolerance)
+                { dup = true; break; }
+        if (!dup) emphases.push_back({m.letter, m.t});
+    }
+
+    if (loops.empty()) return {path, emphases};
+    std::vector<Pt> cleaned;
+    size_t k = 0, li = 0;
+    while (k < path.size()) {
+        if (li < loops.size() && k == loops[li].lo) {
+            cleaned.push_back(loops[li].center);
+            k = loops[li].hi + 1;
+            li++;
+        } else cleaned.push_back(path[k++]);
+    }
+    return {cleaned, emphases};
+}
 
 } // namespace tpt

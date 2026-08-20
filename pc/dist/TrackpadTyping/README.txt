@@ -1,24 +1,32 @@
-TrackpadTyping — glide typing with your mouse or trackpad
-=========================================================
+TrackpadTyping — glide typing with your mouse, trackpad, or wheelchair joystick
+===============================================================================
 
 1. Double-click TrackpadTyping.exe (keep lexicon-en.txt in the same folder)
-   -> You should see a welcome message, and a tray icon appears near the clock.
-      If you see NOTHING at all, Windows blocked the app: open
-      Windows Security > Protection history and allow it, or if
-      "Smart App Control" is on, it silently blocks unsigned apps —
-      turn it off under Windows Security > App & browser control.
-2. Click into any text field, then press Ctrl+Alt+Space — the keyboard appears
-3. CLICK AND HOLD, sweep through a word's letters, RELEASE to type it
-   - quick-click a letter to type just that letter (completions appear above)
-   - click a suggestion chip, or press Left/Right arrows, to pick another guess
-   - space bar (double-tap = period), ' , . ? ! keys, Shift key for capitals
-   - Backspace: right after a swiped word deletes the whole word; hold = more
-   - pause on a letter mid-swipe (or draw a little loop on it) to say
-     "definitely this letter"
-   - top bar shows what you typed — click a word there, then swipe, to replace
-   - bottom row: your five most-used words
-4. Ctrl+Alt+Space again to hide it. Right-click the tray icon to quit.
+   -> A welcome message appears and a tray icon shows near the clock.
+      If NOTHING appears, Windows blocked it: Windows Security >
+      Protection history (allow it), or turn off "Smart App Control"
+      under App & browser control.
+2. Click into any text field, then press Ctrl+Alt+Space — the keyboard appears.
 
-Words you spell out by hand get learned automatically. Long-press a word chip
-to make it forget one. Drag the panel by the bar at its very top.
+NORMAL USE: click and hold, sweep through a word's letters, release.
+
+JOYSTICK / NO-CLICK USE — click the "hover" button (bottom left) once:
+   - Move the pointer freely; nothing happens while you travel.
+   - PAUSE on a word's first letter (a ring fills) — tracing starts.
+   - Sweep through the letters. Stopping mid-word is fine — stops never
+     end the word. A short stop on a letter marks it as "definitely this
+     letter" when keys are close together.
+   - PUSH UPWARD out of the letter grid — the word types.
+   - Hold still on any button (suggestions, space, . ? ! keys, Backspace,
+     your five most-used words at the bottom) and the filling ring
+     activates it — no clicking needed anywhere.
+   - Rest on one letter without moving to type just that letter.
+
+Suggestions above the keys: hover/click one to change the guess, or press
+Left/Right arrows. Backspace right after a word removes the whole word.
+Double-tap space = period. Shift key or auto-capitals after . ? !
+Top bar shows what you typed — pick a word there, then trace, to replace it.
+Words you spell out by hand are learned automatically.
+
+Ctrl+Alt+Space hides the keyboard. Right-click the tray icon to quit.
 No install needed. Nothing leaves your computer.

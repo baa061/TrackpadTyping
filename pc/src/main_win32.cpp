@@ -28,6 +28,7 @@ static HWND g_hwnd;
 static bool g_glideMode = false;
 static bool g_tracing = false;
 static std::vector<Pt> g_tracePath;
+static std::vector<double> g_traceDwell;
 
 static std::vector<Candidate> g_candidates;
 static int g_selectedIndex = 0;
@@ -56,6 +57,26 @@ static POINT g_dragOffset;
 static ULONGLONG g_chipPressedAt = 0;
 static std::string g_chipPressedWord;
 static NOTIFYICONDATAW g_tray = {};
+
+// Hover (click-free, joystick-friendly) mode: dwell arms a word on a letter,
+// stops mid-word never commit, pushing up out of the grid types the word,
+// and dwelling on any control activates it.
+static bool g_hoverMode = false;
+static bool g_hoverTracing = false;
+static std::vector<Pt> g_hoverPath;
+static std::vector<double> g_hoverDwell;
+static POINT g_hoverLast = {-9999, -9999};
+static double g_dwellTargetTime = 0;
+static std::string g_dwellToken;
+static bool g_dwellFired = false;
+static bool g_dwellLive = false;
+static ULONGLONG g_dwellEngineStart = 0;
+static double g_armStillTotal = -1;
+static double g_dwellProgress = 0;         // 0 hides the ring
+static POINT g_dwellPoint = {0, 0};
+static const double HOVER_START_MS = 450, DWELL_ACTIVATE_MS = 650,
+                    HOVER_LETTER_MS = 1100, COMMIT_EXIT_BUFFER = 12,
+                    PAUSE_MAX_MS = 1200;
 
 // ---------------------------------------------------------------- geometry --
 // Panel layout in client coordinates (y down, unlike the engine's y-up).
@@ -105,10 +126,16 @@ static RECT deleteKey() {
     return {ka.left + (int)(pitch * 8.55), (LONG)(ka.bottom - g_layout->rowPitch + 2),
             ka.right - 2, ka.bottom - 2};
 }
+static const int HOVER_TOGGLE_W = 58;
+static RECT hoverToggleRect() {
+    int top = panelH() - BANK_H + 4;
+    return {MARGIN, top, MARGIN + HOVER_TOGGLE_W, top + BANK_H - 12};
+}
 static RECT bankSlot(int i, int n) {
     int top = panelH() - BANK_H + 2;
-    int w = (panelW() - MARGIN * 2) / (n > 0 ? n : 1);
-    return {MARGIN + i * w + 3, top, MARGIN + (i + 1) * w - 3, top + BANK_H - 8};
+    int left = MARGIN + HOVER_TOGGLE_W + 6;
+    int w = (panelW() - left - MARGIN) / (n > 0 ? n : 1);
+    return {left + i * w + 3, top, left + (i + 1) * w - 3, top + BANK_H - 8};
 }
 static RECT stripRect() { return {MARGIN, GRABBER_H + TEXTBAR_H, panelW() - MARGIN, GRABBER_H + TEXTBAR_H + STRIP_H}; }
 static RECT textBar() { return {MARGIN, GRABBER_H + 2, panelW() - MARGIN, GRABBER_H + TEXTBAR_H - 2}; }
@@ -248,9 +275,10 @@ static void selectCandidate(int idx) {
     refresh();
 }
 
-static void commitGlide(const std::vector<Pt>& path) {
+static void commitGlide(const std::vector<Pt>& path,
+                        const std::vector<Emphasis>& emphases = {}) {
     g_letterRun.clear();
-    auto cands = g_decoder->decode(path);
+    auto cands = g_decoder->decode(path, emphases);
     if (cands.empty() || cands[0].score > g_cfg.maxScoreKeys * g_layout->keyPitch) {
         g_hasCommit = false;
         showCandidates({}, 0);
@@ -385,6 +413,152 @@ static void confine(bool on) {
     ClipCursor(&r);
 }
 
+static POINT clientCursor();
+static bool inRect(const RECT& r, POINT p);
+static bool activateControl(POINT c);
+static void tapLetter(char ch);
+static void backspaceViaDwell();
+
+static void setHoverMode(bool on) {
+    g_hoverMode = on;
+    g_hoverTracing = false;
+    g_hoverPath.clear(); g_hoverDwell.clear();
+    g_dwellToken.clear(); g_dwellTargetTime = 0; g_dwellFired = false;
+    g_dwellLive = false; g_dwellEngineStart = GetTickCount64();
+    g_dwellProgress = 0;
+    setStatus(on ? L"hover mode - pause on a letter to start" : L"");
+    showCandidates({}, 0);
+}
+
+// What the cursor is over, as a stable identity for dwell refractory. The
+// toggle itself is absent on purpose: a resting cursor must never dwell the
+// user out of their own input mode.
+static std::string dwellTokenAt(POINT c) {
+    if (inRect(hoverToggleRect(), c)) return "";
+    if (inRect(spaceBar(), c)) return "space";
+    for (int i = 0; i < 6; i++) if (inRect(punctRect(i), c)) return "punct" + std::to_string(i);
+    for (auto& twr : g_typedWordRects)
+        if (inRect(twr.r, c)) return "typed" + std::to_string(twr.lo);
+    for (size_t i = 0; i < g_chipRects.size(); i++)
+        if (g_hasCommit && inRect(g_chipRects[i], c)) return "chip" + std::to_string(i);
+    if (inRect(deleteKey(), c)) return "del";
+    for (size_t i = 0; i < g_bank.size(); i++)
+        if (inRect(bankSlot((int)i, (int)g_bank.size()), c)) return "bank" + std::to_string(i);
+    RECT ka = keyArea(); InflateRect(&ka, 6, 6);
+    if (inRect(ka, c)) return "key";
+    return "";
+}
+
+static void finishHoverTrace() {
+    g_hoverTracing = false;
+    g_hoverPath.clear(); g_hoverDwell.clear();
+    g_armStillTotal = -1;
+    g_dwellProgress = 0;
+    refresh();
+}
+
+static double g_hoverStill = 0;
+
+static void hoverTick() {
+    if (!g_glideMode || !g_hoverMode) return;
+    if (g_tracing || g_deleteHeld || g_draggingPanel) { g_hoverStill = 0; g_dwellProgress = 0; return; }
+
+    const double dt = 0.01;                       // 10ms timer
+    POINT c = clientCursor();
+    bool moved = std::abs(c.x - g_hoverLast.x) > 1 || std::abs(c.y - g_hoverLast.y) > 1;
+    g_hoverStill = moved ? 0 : g_hoverStill + dt;
+    g_hoverLast = c;
+
+    if (!g_dwellLive) {                           // grace after activation warp
+        if (GetTickCount64() - g_dwellEngineStart < 350) return;
+        if (moved) g_dwellLive = true; else return;
+    }
+
+    if (g_hoverTracing) {
+        if (moved) {
+            g_armStillTotal = -1;
+            g_hoverPath.push_back(toEngine(c));
+            g_hoverDwell.push_back(0);
+            g_tracePath = g_hoverPath;            // reuse live-trace drawing
+            refresh();
+        } else {
+            if (!g_hoverDwell.empty()) g_hoverDwell.back() += dt;
+            if (g_armStillTotal >= 0) {           // single-letter path
+                g_armStillTotal += dt;
+                g_dwellPoint = c;
+                g_dwellProgress = std::min(1.0, g_armStillTotal * 1000 / HOVER_LETTER_MS);
+                refresh();
+                if (g_armStillTotal * 1000 >= HOVER_LETTER_MS) {
+                    Pt p = toEngine(c);
+                    finishHoverTrace();
+                    g_tracePath.clear();
+                    char ch = g_decoder->decodeTap(p);
+                    if (ch) tapLetter(ch);
+                    return;
+                }
+            }
+        }
+        // spatial commit: exit above the grid (client y smaller = higher)
+        RECT ka = keyArea();
+        if (c.y < ka.top - (int)COMMIT_EXIT_BUFFER) {
+            auto path = g_hoverPath;
+            auto dwell = g_hoverDwell;
+            finishHoverTrace();
+            g_tracePath.clear();
+            if (pathLength(path) >= 0.55 * g_layout->keyPitch) {
+                auto [cleaned, emphases] = detectEmphases(path, dwell, *g_layout, g_cfg);
+                commitGlide(cleaned, emphases);
+            }
+        }
+        return;
+    }
+
+    // TRAVELING
+    std::string token = dwellTokenAt(c);
+    if (moved || token != g_dwellToken) {
+        g_dwellToken = token;
+        g_dwellTargetTime = 0;
+        g_dwellFired = false;
+        if (g_dwellProgress != 0) { g_dwellProgress = 0; refresh(); }
+        return;
+    }
+    if (token.empty()) { if (g_dwellProgress != 0) { g_dwellProgress = 0; refresh(); } return; }
+
+    g_dwellTargetTime += dt;
+    double ms = g_dwellTargetTime * 1000;
+
+    if (token == "key") {
+        g_dwellPoint = c;
+        g_dwellProgress = std::min(1.0, ms / HOVER_START_MS);
+        refresh();
+        if (ms >= HOVER_START_MS) {
+            g_hoverTracing = true;
+            g_hoverPath = {toEngine(c)};
+            g_hoverDwell = {0};
+            g_armStillTotal = g_dwellTargetTime;
+            g_hoverStill = 0;
+            g_dwellToken.clear(); g_dwellTargetTime = 0;
+            g_dwellProgress = 0;
+            setStatus(L"tracing - sweep, exit upward to type");
+            showCandidates({}, 0);
+        }
+        return;
+    }
+
+    if (g_dwellFired) {
+        if (token == "del" && ms >= 500) { g_dwellTargetTime = 0; backspaceViaDwell(); }
+        return;
+    }
+    g_dwellPoint = c;
+    g_dwellProgress = std::min(1.0, ms / DWELL_ACTIVATE_MS);
+    refresh();
+    if (ms >= DWELL_ACTIVATE_MS) {
+        g_dwellFired = true;
+        g_dwellProgress = 0;
+        activateControl(c);
+    }
+}
+
 static void toggleGlide() {
     g_glideMode = !g_glideMode;
     if (g_glideMode) {
@@ -396,6 +570,8 @@ static void toggleGlide() {
         RECT r; GetWindowRect(g_hwnd, &r);
         SetCursorPos((r.left + r.right) / 2, (r.top + r.bottom) / 2);
         confine(true);
+        g_dwellLive = false;
+        g_dwellEngineStart = GetTickCount64();
         setStatus(L"trace a word");
         showCandidates({}, 0);
     } else {
@@ -439,6 +615,79 @@ static void beginTrace() {
 
     g_tracing = true;
     g_tracePath = {toEngine(c)};
+    g_traceDwell = {0};
+}
+
+static void setHoverMode(bool on);
+
+static void tapLetter(char ch) {
+    if (g_replaceLo >= 0) {
+        std::string t = applyCase(std::string(1, ch));
+        performReplace(g_replaceLo, g_replaceHi, t);
+        g_hasCommit = false;
+        setStatus(widen(t));
+    } else {
+        if (g_letterRun.empty()) g_letterRunCapitalized = g_shiftPending;
+        inject(applyCase(std::string(1, ch)));
+        g_letterRun += ch;
+        offerCompletions();
+    }
+}
+
+static void backspaceViaDwell() {
+    bool midRun = !g_letterRun.empty();
+    g_letterRun.clear();
+    g_pendingReinforce.clear();
+    if (g_hasCommit && !midRun) {
+        eraseN(g_commit.insertedLength + (int)g_commit.tail.size());
+        if (!g_commit.tail.empty()) inject(g_commit.tail);
+        g_hasCommit = false;
+        setStatus(L"\x232B word");
+    } else {
+        g_hasCommit = false;
+        eraseN(1);
+        setStatus(L"\x232B");
+    }
+    showCandidates({}, 0);
+}
+
+// Shared control dispatch for click-taps and dwell fires: everything on the
+// panel that is not a letter key.
+static bool activateControl(POINT c) {
+    if (inRect(hoverToggleRect(), c)) { setHoverMode(!g_hoverMode); return true; }
+    if (inRect(spaceBar(), c)) { spaceTapped(); return true; }
+    for (int i = 0; i < 6; i++) if (inRect(punctRect(i), c)) { punctTapped(i); return true; }
+    for (auto& twr : g_typedWordRects)
+        if (inRect(twr.r, c)) {
+            flushReinforce();
+            g_letterRun.clear(); g_hasCommit = false;
+            if (g_replaceLo == twr.lo) { clearReplaceTarget(); setStatus(L""); }
+            else {
+                g_replaceLo = twr.lo; g_replaceHi = twr.hi;
+                setStatus(L"glide to replace");
+            }
+            showCandidates({}, 0);
+            refresh();
+            return true;
+        }
+    for (size_t i = 0; i < g_chipRects.size(); i++)
+        if (g_hasCommit && inRect(g_chipRects[i], c)) { selectCandidate((int)i); return true; }
+    if (inRect(deleteKey(), c)) { backspaceViaDwell(); return true; }
+    for (size_t i = 0; i < g_bank.size(); i++)
+        if (inRect(bankSlot((int)i, (int)g_bank.size()), c)) {
+            std::string word = applyCase(g_bank[i]);
+            g_letterRun.clear();
+            if (g_replaceLo >= 0) performReplace(g_replaceLo, g_replaceHi, word);
+            else { wordSeparatorIfNeeded(); inject(word + " "); }
+            g_lexicon->reinforce(g_bank[i], session(), nowUnix());
+            g_lexicon->saveLearned(learnedPath());
+            g_hasCommit = false;
+            refreshBank();
+            showCandidates({}, 0);
+            setStatus(widen(word));
+            return true;
+        }
+    return false;
 }
 
 static void endTrace() {
@@ -447,7 +696,9 @@ static void endTrace() {
     if (!g_tracing) return;
     g_tracing = false;
     auto path = g_tracePath;
+    auto dwellCopy = g_traceDwell;
     g_tracePath.clear();
+    g_traceDwell.clear();
     flushReinforce();
 
     POINT c = clientCursor();
@@ -464,59 +715,18 @@ static void endTrace() {
             return;
         }
         g_chipPressedWord.clear();
-        if (inRect(spaceBar(), c)) { spaceTapped(); return; }
-        for (int i = 0; i < 6; i++) if (inRect(punctRect(i), c)) { punctTapped(i); return; }
-        for (auto& twr : g_typedWordRects)
-            if (inRect(twr.r, c)) {
-                flushReinforce();
-                g_letterRun.clear(); g_hasCommit = false;
-                if (g_replaceLo == twr.lo) { clearReplaceTarget(); setStatus(L""); }
-                else {
-                    g_replaceLo = twr.lo; g_replaceHi = twr.hi;
-                    setStatus(L"glide to replace");
-                }
-                showCandidates({}, 0);
-                refresh();
-                return;
-            }
-        for (size_t i = 0; i < g_chipRects.size(); i++)
-            if (g_hasCommit && inRect(g_chipRects[i], c)) { selectCandidate((int)i); return; }
-        for (size_t i = 0; i < g_bank.size(); i++)
-            if (inRect(bankSlot((int)i, (int)g_bank.size()), c)) {
-                std::string word = applyCase(g_bank[i]);
-                g_letterRun.clear();
-                if (g_replaceLo >= 0) performReplace(g_replaceLo, g_replaceHi, word);
-                else { wordSeparatorIfNeeded(); inject(word + " "); }
-                g_lexicon->reinforce(g_bank[i], session(), nowUnix());
-                g_lexicon->saveLearned(learnedPath());
-                g_hasCommit = false;
-                refreshBank();
-                showCandidates({}, 0);
-                setStatus(widen(word));
-                return;
-            }
+        if (activateControl(c)) return;
         RECT ka = keyArea();
         InflateRect(&ka, 6, 6);
         if (inRect(ka, c)) {
             char ch = g_decoder->decodeTap(toEngine(c));
-            if (ch) {
-                if (g_replaceLo >= 0) {
-                    std::string t = applyCase(std::string(1, ch));
-                    performReplace(g_replaceLo, g_replaceHi, t);
-                    g_hasCommit = false;
-                    setStatus(widen(t));
-                } else {
-                    if (g_letterRun.empty()) g_letterRunCapitalized = g_shiftPending;
-                    inject(applyCase(std::string(1, ch)));
-                    g_letterRun += ch;
-                    offerCompletions();
-                }
-            }
+            if (ch) tapLetter(ch);
         }
         return;
     }
     g_chipPressedWord.clear();
-    commitGlide(path);
+    auto [cleaned, emphases] = detectEmphases(path, dwellCopy, *g_layout, g_cfg);
+    commitGlide(cleaned, emphases);
 }
 
 // hooks ----------------------------------------------------------------------
@@ -693,6 +903,12 @@ static void paint(HDC dc) {
         label(r, PUNCT[i], shiftKey && g_shiftPending ? RGB(255,255,255) : RGB(185,185,192), fKey);
     }
 
+    // hover toggle
+    {
+        RECT r = hoverToggleRect();
+        fill(r, g_hoverMode ? RGB(61, 158, 107) : RGB(61, 61, 68));
+        label(r, L"hover", g_hoverMode ? RGB(255,255,255) : RGB(160,160,168), fSmall);
+    }
     // word bank
     for (size_t i = 0; i < g_bank.size(); i++) {
         RECT r = bankSlot((int)i, (int)g_bank.size());
@@ -700,6 +916,34 @@ static void paint(HDC dc) {
         label(r, widen(g_bank[i]), RGB(200,200,206), fSmall);
     }
 
+    // hover-tracing grid tint
+    if (g_hoverTracing) {
+        RECT kb = keyArea();
+        InflateRect(&kb, 3, 3);
+        HPEN pen = CreatePen(PS_SOLID, 2, RGB(77, 153, 255));
+        HGDIOBJ op = SelectObject(mem, pen);
+        HGDIOBJ ob = SelectObject(mem, GetStockObject(NULL_BRUSH));
+        RoundRect(mem, kb.left, kb.top, kb.right, kb.bottom, 8, 8);
+        SelectObject(mem, op); SelectObject(mem, ob);
+        DeleteObject(pen);
+    }
+    // dwell progress ring
+    if (g_dwellProgress > 0.03) {
+        int r = 14;
+        HPEN bgp = CreatePen(PS_SOLID, 4, RGB(60, 60, 66));
+        HGDIOBJ op = SelectObject(mem, bgp);
+        HGDIOBJ ob = SelectObject(mem, GetStockObject(NULL_BRUSH));
+        Ellipse(mem, g_dwellPoint.x - r, g_dwellPoint.y - r, g_dwellPoint.x + r, g_dwellPoint.y + r);
+        SelectObject(mem, op); DeleteObject(bgp);
+        HPEN arcp = CreatePen(PS_SOLID, 4, RGB(89, 204, 128));
+        SelectObject(mem, arcp);
+        double a = g_dwellProgress * 6.28318;
+        Arc(mem, g_dwellPoint.x - r, g_dwellPoint.y - r, g_dwellPoint.x + r, g_dwellPoint.y + r,
+            g_dwellPoint.x + (int)(100 * sin(a)), g_dwellPoint.y - (int)(100 * cos(a)),
+            g_dwellPoint.x, g_dwellPoint.y - 100);
+        SelectObject(mem, op); SelectObject(mem, ob);
+        DeleteObject(arcp);
+    }
     // live trace
     if (g_tracePath.size() > 1) {
         HPEN pen = CreatePen(PS_SOLID, 4, RGB(102,204,255));
@@ -747,7 +991,10 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             Pt p = toEngine(clientCursor());
             if (g_tracePath.empty() || g_tracePath.back().dist(p) > 0.5) {
                 g_tracePath.push_back(p);
+                g_traceDwell.push_back(0);
                 refresh();
+            } else if (!g_traceDwell.empty()) {
+                g_traceDwell.back() += 0.01;
             }
         } else if (g_deleteHeld) {
             double held = (GetTickCount64() - g_deleteSince) / 1000.0;
@@ -759,7 +1006,10 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                     if (g_deleteRepeats <= 16) eraseN(1); else eraseWord();
                 }
             }
-        } else if (g_glideMode) refresh();          // hover highlight
+        } else if (g_glideMode) {
+            hoverTick();
+            refresh();                              // hover highlight
+        }
         return 0;
     case WM_APP + 3:                                // tray icon events
         if (l == WM_RBUTTONUP || l == WM_LBUTTONUP) {
