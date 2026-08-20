@@ -21,6 +21,8 @@ final class HUDView: NSView {
     /// the bank row becomes the category selector.
     var emojiModeOn = false
     var emojiPage: [String] = []
+    /// Vertical scroll through the category, in points (0 = top).
+    var emojiScroll: CGFloat = 0
     var emojiCategoryIcons: [String] = []
     var emojiCategoryIndex = 0
     /// Recent emoji shown in the candidate strip while in emoji mode.
@@ -43,19 +45,24 @@ final class HUDView: NSView {
                width: Self.emojiToggleWidth, height: Self.bankHeight - 12)
     }
 
-    /// One emoji cell of the 10x3 grid occupying the letter-key area.
+    var emojiMaxScroll: CGFloat {
+        let rows = CGFloat((emojiPage.count + 9) / 10)
+        return max(0, rows * (padRect.height / 3) - padRect.height)
+    }
+
+    /// One emoji cell of the scrollable 10-column grid in the letter-key area.
     func emojiCellRect(_ i: Int) -> NSRect {
         let r = padRect
         let cw = r.width / 10
         let ch = r.height / 3
         let col = CGFloat(i % 10), row = CGFloat(i / 10)   // row 0 = top
         return NSRect(x: r.minX + col * cw + 2,
-                      y: r.maxY - (row + 1) * ch + 2,
+                      y: r.maxY - (row + 1) * ch + 2 + emojiScroll,
                       width: cw - 4, height: ch - 4)
     }
 
     func emojiCellIndex(at viewPoint: NSPoint) -> Int? {
-        guard emojiModeOn else { return nil }
+        guard emojiModeOn, padRect.contains(viewPoint) else { return nil }
         for i in emojiPage.indices where emojiCellRect(i).contains(viewPoint) { return i }
         return nil
     }
@@ -340,17 +347,32 @@ final class HUDView: NSView {
     }
 
     private func drawEmojiGrid() {
+        emojiScroll = min(max(emojiScroll, 0), emojiMaxScroll)
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: layout.rowPitch * 0.52),
         ]
+        NSGraphicsContext.current?.saveGraphicsState()
+        NSBezierPath(rect: padRect).addClip()
         for (i, e) in emojiPage.enumerated() {
             let cell = emojiCellRect(i)
+            guard cell.maxY > padRect.minY, cell.minY < padRect.maxY else { continue }
             NSColor(calibratedWhite: 0.20, alpha: 0.9).setFill()
             NSBezierPath(roundedRect: cell, xRadius: 6, yRadius: 6).fill()
             let s = NSString(string: e)
             let size = s.size(withAttributes: attrs)
             s.draw(at: NSPoint(x: cell.midX - size.width / 2, y: cell.midY - size.height / 2),
                    withAttributes: attrs)
+        }
+        NSGraphicsContext.current?.restoreGraphicsState()
+
+        // Scroll position hint along the right edge.
+        if emojiMaxScroll > 0 {
+            let track = padRect
+            let h = max(24, track.height * track.height / (track.height + emojiMaxScroll))
+            let y = track.maxY - h - (track.height - h) * (emojiScroll / emojiMaxScroll)
+            NSColor(calibratedWhite: 0.5, alpha: 0.55).setFill()
+            NSBezierPath(roundedRect: NSRect(x: track.maxX - 4, y: y, width: 3, height: h),
+                         xRadius: 1.5, yRadius: 1.5).fill()
         }
     }
 

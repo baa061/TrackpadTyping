@@ -30,10 +30,10 @@ final class EventTapController {
     var candidatesActive = false
     /// +1 for right, -1 for left.
     var onArrow: ((Int) -> Void)?
-    /// Horizontal scroll delta (points) while glide mode is on — drives the
-    /// candidate strip. Scroll events are consumed so the app behind the
-    /// keyboard does not also scroll.
-    var onStripScroll: ((Double) -> Void)?
+    /// Scroll deltas (points) while glide mode is on — horizontal drives the
+    /// candidate strip, vertical the emoji grid. Consumed so the app behind
+    /// the keyboard does not also scroll.
+    var onScroll: ((Double, Double) -> Void)?
 
     /// While glide mode is on, the pointer is confined to this rect (screen
     /// coordinates, bottom-left origin — the AppKit convention). Nil disables
@@ -171,8 +171,12 @@ private func eventTapCallback(proxy: CGEventTapProxy,
         if abs(dx) < 0.01 {
             dx = event.getDoubleValueField(.scrollWheelEventDeltaAxis2) * 10.0
         }
-        if abs(dx) > 0.01 {
-            DispatchQueue.main.async { controller.onStripScroll?(dx) }
+        var dy = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
+        if abs(dy) < 0.01 {
+            dy = event.getDoubleValueField(.scrollWheelEventDeltaAxis1) * 10.0
+        }
+        if abs(dx) > 0.01 || abs(dy) > 0.01 {
+            DispatchQueue.main.async { controller.onScroll?(dx, dy) }
         }
         return nil
     }

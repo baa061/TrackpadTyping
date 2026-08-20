@@ -186,10 +186,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         EventTapController.shared.onTraceDown = { [weak self] in self?.beginTrace() }
         EventTapController.shared.onTraceUp = { [weak self] in self?.endTrace() }
         EventTapController.shared.onArrow = { [weak self] dir in self?.arrowCandidate(dir) }
-        EventTapController.shared.onStripScroll = { [weak self] dx in
+        EventTapController.shared.onScroll = { [weak self] dx, dy in
             guard let self, self.glideMode else { return }
             // Natural direction: content follows the fingers.
-            self.hud.hudView.candidateOffset -= CGFloat(dx)
+            if self.emojiMode, abs(dy) > abs(dx) {
+                // Natural scrolling: fingers up reveals the rows below.
+                self.hud.hudView.emojiScroll -= CGFloat(dy)
+            } else {
+                self.hud.hudView.candidateOffset -= CGFloat(dx)
+            }
             self.hud.refresh()
             self.dumpUIState()
         }
@@ -661,10 +666,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             if let c = hud.emojiCategoryIndex(screenPoint: point) {
-                emojiCategory = c
-                hud.hudView.emojiCategoryIndex = c
-                hud.hudView.emojiPage = EmojiData.categories[c].emoji
+                if c == emojiCategory {
+                    // Re-activating the current category pages through it —
+                    // scrolling for those who cannot scroll (dwell users).
+                    let page = hud.hudView.padRect.height
+                    let next = hud.hudView.emojiScroll + page
+                    hud.hudView.emojiScroll = next > hud.hudView.emojiMaxScroll + 1 ? 0 : next
+                } else {
+                    emojiCategory = c
+                    hud.hudView.emojiCategoryIndex = c
+                    hud.hudView.emojiPage = EmojiData.categories[c].emoji
+                    hud.hudView.emojiScroll = 0
+                }
                 hud.refresh()
+                dumpUIState()
                 return true
             }
             if let idx = hud.candidateIndex(screenPoint: point),
@@ -1597,6 +1612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "hoverToggle": screen(hud.hudView.hoverToggleRect),
             "emojiToggle": screen(hud.hudView.emojiToggleRect),
             "emojiMode": emojiMode,
+            "emojiScroll": Double(hud.hudView.emojiScroll),
             "emojiPage": hud.hudView.emojiPage,
             "emojiCells": hud.hudView.emojiPage.indices.map { screen(hud.hudView.emojiCellRect($0)) },
             "deleteKey": screen(hud.hudView.deleteKeyRect),
