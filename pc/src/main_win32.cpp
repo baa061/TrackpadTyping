@@ -10,6 +10,7 @@
 // Run with lexicon-en.txt next to the .exe.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <string>
 #include <vector>
@@ -54,6 +55,7 @@ static bool g_draggingPanel = false;
 static POINT g_dragOffset;
 static ULONGLONG g_chipPressedAt = 0;
 static std::string g_chipPressedWord;
+static NOTIFYICONDATAW g_tray = {};
 
 // ---------------------------------------------------------------- geometry --
 // Panel layout in client coordinates (y down, unlike the engine's y-up).
@@ -759,12 +761,39 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             }
         } else if (g_glideMode) refresh();          // hover highlight
         return 0;
-    case WM_DESTROY: PostQuitMessage(0); return 0;
+    case WM_APP + 3:                                // tray icon events
+        if (l == WM_RBUTTONUP || l == WM_LBUTTONUP) {
+            POINT pt; GetCursorPos(&pt);
+            HMENU menu = CreatePopupMenu();
+            AppendMenuW(menu, MF_STRING, 10, g_glideMode ? L"Hide keyboard" : L"Show keyboard (Ctrl+Alt+Space)");
+            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+            AppendMenuW(menu, MF_STRING, 11, L"Quit TrackpadTyping");
+            SetForegroundWindow(h);
+            int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, h, nullptr);
+            DestroyMenu(menu);
+            if (cmd == 10) toggleGlide();
+            if (cmd == 11) DestroyWindow(h);
+        }
+        return 0;
+    case WM_DESTROY:
+        Shell_NotifyIconW(NIM_DELETE, &g_tray);
+        PostQuitMessage(0);
+        return 0;
     }
     return DefWindowProcW(h, m, w, l);
 }
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+    // Single instance: a second launch (double-click twice) would stack
+    // low-level hooks and fight over the cursor.
+    CreateMutexW(nullptr, TRUE, L"TrackpadTypingSingleInstance");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        MessageBoxW(nullptr, L"TrackpadTyping is already running.\n"
+                    L"Press Ctrl+Alt+Space to show the keyboard.",
+                    L"TrackpadTyping", MB_ICONINFORMATION);
+        return 0;
+    }
+
     static KeyboardLayout layout(44.0, 1.35);
     g_layout = &layout;
 
@@ -799,6 +828,25 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, inst, 0);
     g_keyHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyProc, inst, 0);
     SetTimer(g_hwnd, 1, 10, nullptr);               // trace sampling / repeats / hover
+
+    // Tray icon: the only visible sign the app is running while the keyboard
+    // is hidden, and the only way to quit it without Task Manager.
+    g_tray.cbSize = sizeof(g_tray);
+    g_tray.hWnd = g_hwnd;
+    g_tray.uID = 1;
+    g_tray.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    g_tray.uCallbackMessage = WM_APP + 3;
+    g_tray.hIcon = LoadIconW(nullptr, (LPCWSTR)IDI_APPLICATION);
+    lstrcpyW(g_tray.szTip, L"TrackpadTyping - Ctrl+Alt+Space");
+    Shell_NotifyIconW(NIM_ADD, &g_tray);
+
+    MessageBoxW(nullptr,
+        L"TrackpadTyping is running (see the tray icon near the clock).\n\n"
+        L"1. Click into any text field\n"
+        L"2. Press Ctrl+Alt+Space to show the keyboard\n"
+        L"3. Click-and-hold, sweep through a word's letters, release\n\n"
+        L"Right-click the tray icon to quit.",
+        L"TrackpadTyping", MB_ICONINFORMATION);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
