@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <commctrl.h>
 #include <string>
 #include <vector>
 #include "engine.hpp"
@@ -74,9 +75,8 @@ static ULONGLONG g_dwellEngineStart = 0;
 static double g_armStillTotal = -1;
 static double g_dwellProgress = 0;         // 0 hides the ring
 static POINT g_dwellPoint = {0, 0};
-static const double HOVER_START_MS = 450, DWELL_ACTIVATE_MS = 650,
-                    HOVER_LETTER_MS = 1100, COMMIT_EXIT_BUFFER = 12,
-                    PAUSE_MAX_MS = 1200;
+static double HOVER_START_MS = 450, DWELL_ACTIVATE_MS = 650, HOVER_LETTER_MS = 1100;
+static const double COMMIT_EXIT_BUFFER = 12, PAUSE_MAX_MS = 1200;
 
 // ---------------------------------------------------------------- geometry --
 // Panel layout in client coordinates (y down, unlike the engine's y-up).
@@ -196,6 +196,24 @@ static void eraseWord() {                            // mirror of Ctrl+Backspace
 
 // ------------------------------------------------------------ typing logic --
 static std::string learnedPath();
+static std::string appDataDir();
+static std::string settingsPath() { return appDataDir() + "\\settings.txt"; }
+
+static void saveSettings() {
+    std::ofstream f(settingsPath(), std::ios::trunc);
+    f << "hoverStartMS " << HOVER_START_MS << "\n"
+      << "dwellActivateMS " << DWELL_ACTIVATE_MS << "\n"
+      << "hoverLetterMS " << HOVER_LETTER_MS << "\n";
+}
+static void loadSettings() {
+    std::ifstream f(settingsPath());
+    std::string k; double v;
+    while (f >> k >> v) {
+        if (k == "hoverStartMS") HOVER_START_MS = v;
+        else if (k == "dwellActivateMS") DWELL_ACTIVATE_MS = v;
+        else if (k == "hoverLetterMS") HOVER_LETTER_MS = v;
+    }
+}
 static double nowUnix() { return (double)time(nullptr); }
 static int session() { return Lexicon::currentSession(nowUnix()); }
 
@@ -971,6 +989,83 @@ static std::string appDataDir() {
 }
 static std::string learnedPath() { return appDataDir() + "\\learned.txt"; }
 
+// ---------------------------------------------------------- settings UI --
+static HWND g_settingsWnd = nullptr;
+static HWND g_bars[3], g_vals[3];
+static const wchar_t* SET_LABELS[3] = {
+    L"Start a word (pause on a letter)",
+    L"Press a button (suggestions, space, delete...)",
+    L"Type a single letter (rest on one key)",
+};
+static double* SET_TARGETS[3] = {&HOVER_START_MS, &DWELL_ACTIVATE_MS, &HOVER_LETTER_MS};
+static const int SET_MIN[3] = {200, 300, 600};
+static const int SET_MAX[3] = {1500, 2000, 3000};
+
+static void settingsUpdateLabel(int i) {
+    wchar_t buf[32];
+    wsprintfW(buf, L"%d ms", (int)*SET_TARGETS[i]);
+    SetWindowTextW(g_vals[i], buf);
+}
+
+static LRESULT CALLBACK SettingsProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    switch (m) {
+    case WM_HSCROLL:
+        for (int i = 0; i < 3; i++)
+            if ((HWND)l == g_bars[i]) {
+                *SET_TARGETS[i] = (double)SendMessageW(g_bars[i], TBM_GETPOS, 0, 0);
+                settingsUpdateLabel(i);
+                saveSettings();
+            }
+        return 0;
+    case WM_COMMAND:
+        if (LOWORD(w) == 100) {                      // reset button
+            HOVER_START_MS = 450; DWELL_ACTIVATE_MS = 650; HOVER_LETTER_MS = 1100;
+            for (int i = 0; i < 3; i++) {
+                SendMessageW(g_bars[i], TBM_SETPOS, TRUE, (LPARAM)*SET_TARGETS[i]);
+                settingsUpdateLabel(i);
+            }
+            saveSettings();
+        }
+        return 0;
+    case WM_CLOSE: ShowWindow(h, SW_HIDE); return 0;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+static void showSettings(HINSTANCE inst) {
+    if (!g_settingsWnd) {
+        WNDCLASSW wc = {};
+        wc.lpfnWndProc = SettingsProc;
+        wc.hInstance = inst;
+        wc.lpszClassName = L"TrackpadTypingSettings";
+        wc.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        RegisterClassW(&wc);
+        g_settingsWnd = CreateWindowExW(WS_EX_TOPMOST, wc.lpszClassName,
+            L"TrackpadTyping - Dwell Settings",
+            WS_CAPTION | WS_SYSMENU, 200, 200, 460, 300,
+            nullptr, nullptr, inst, nullptr);
+        int y = 10;
+        for (int i = 0; i < 3; i++) {
+            CreateWindowW(L"STATIC", SET_LABELS[i], WS_CHILD | WS_VISIBLE,
+                          15, y, 320, 18, g_settingsWnd, nullptr, inst, nullptr);
+            g_vals[i] = CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_RIGHT,
+                                      350, y, 80, 18, g_settingsWnd, nullptr, inst, nullptr);
+            g_bars[i] = CreateWindowW(TRACKBAR_CLASSW, L"",
+                                      WS_CHILD | WS_VISIBLE | TBS_HORZ,
+                                      15, y + 20, 415, 30, g_settingsWnd, nullptr, inst, nullptr);
+            SendMessageW(g_bars[i], TBM_SETRANGE, TRUE, MAKELPARAM(SET_MIN[i], SET_MAX[i]));
+            SendMessageW(g_bars[i], TBM_SETPOS, TRUE, (LPARAM)*SET_TARGETS[i]);
+            settingsUpdateLabel(i);
+            y += 62;
+        }
+        CreateWindowW(L"BUTTON", L"Reset to defaults", WS_CHILD | WS_VISIBLE,
+                      15, y + 4, 150, 28, g_settingsWnd, (HMENU)100, inst, nullptr);
+    }
+    ShowWindow(g_settingsWnd, SW_SHOW);
+    SetForegroundWindow(g_settingsWnd);
+}
+
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
     case WM_PAINT: {
@@ -1016,12 +1111,14 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             POINT pt; GetCursorPos(&pt);
             HMENU menu = CreatePopupMenu();
             AppendMenuW(menu, MF_STRING, 10, g_glideMode ? L"Hide keyboard" : L"Show keyboard (Ctrl+Alt+Space)");
+            AppendMenuW(menu, MF_STRING, 12, L"Dwell settings...");
             AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
             AppendMenuW(menu, MF_STRING, 11, L"Quit TrackpadTyping");
             SetForegroundWindow(h);
             int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, h, nullptr);
             DestroyMenu(menu);
             if (cmd == 10) toggleGlide();
+            if (cmd == 12) showSettings((HINSTANCE)GetWindowLongPtrW(h, GWLP_HINSTANCE));
             if (cmd == 11) DestroyWindow(h);
         }
         return 0;
@@ -1043,6 +1140,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
                     L"TrackpadTyping", MB_ICONINFORMATION);
         return 0;
     }
+
+    INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_BAR_CLASSES};
+    InitCommonControlsEx(&icc);
+    loadSettings();
 
     static KeyboardLayout layout(44.0, 1.35);
     g_layout = &layout;

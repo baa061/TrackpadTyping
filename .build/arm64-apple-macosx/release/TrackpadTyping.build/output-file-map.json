@@ -76,6 +76,12 @@
     "swift-dependencies": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.swiftdeps",
     "diagnostics": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.dia"
   },
+  "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SettingsWindow.swift": {
+    "object": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SettingsWindow.swift.o",
+    "swiftmodule": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SettingsWindow~partial.swiftmodule",
+    "swift-dependencies": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SettingsWindow.swiftdeps",
+    "diagnostics": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SettingsWindow.dia"
+  },
   "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift": {
     "object": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector.swift.o",
     "swiftmodule": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector~partial.swiftmodule",

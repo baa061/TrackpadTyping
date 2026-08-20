@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
     private var hud: HUDWindow!
+    private var settingsWindow: SettingsWindow?
     private var hoverTimer: Timer?
 
     private var glideMode = false
@@ -255,6 +256,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         warpItem.state = config.warpPointerOnActivate ? .on : .off
         menu.addItem(warpItem)
 
+        menu.addItem(withTitle: "Dwell Settings…",
+                     action: #selector(menuDwellSettings), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Reset Keyboard Position",
                      action: #selector(menuResetPosition), keyEquivalent: "").target = self
 
@@ -288,6 +291,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         config.warpPointerOnActivate.toggle()
         config.save()
         sender.state = config.warpPointerOnActivate ? .on : .off
+    }
+
+    @objc private func menuDwellSettings() {
+        if settingsWindow == nil {
+            let w = SettingsWindow(config: config)
+            w.onChange = { [weak self] updated in
+                guard let self else { return }
+                // Dwell timings are read live from config at every engine
+                // tick, so applying is just adopting the new values.
+                self.config.hoverStartDwellMS = updated.hoverStartDwellMS
+                self.config.dwellActivateMS = updated.dwellActivateMS
+                self.config.hoverLetterDwellMS = updated.hoverLetterDwellMS
+                self.config.save()
+            }
+            settingsWindow = w
+        }
+        settingsWindow?.present()
     }
 
     @objc private func menuResetPosition() {

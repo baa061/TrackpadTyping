@@ -140,8 +140,10 @@ modes show up there.
 
 ## Configuration
 
-`~/Library/Application Support/TrackpadTyping/config.json` (menu bar → Reveal
-Settings File). Distances are in *key pitches* so they keep meaning at any
+Dwell timings (how long each pause takes in hover mode) have their own panel:
+menu bar → **Dwell Settings…** — sliders apply live and persist. Everything
+else lives in `~/Library/Application Support/TrackpadTyping/config.json`
+(menu bar → Reveal Settings File). Distances are in *key pitches* so they keep meaning at any
 keyboard size. Useful knobs:
 
 | key | default | meaning |

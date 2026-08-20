@@ -22,6 +22,10 @@ JOYSTICK / NO-CLICK USE — click the "hover" button (bottom left) once:
      activates it — no clicking needed anywhere.
    - Rest on one letter without moving to type just that letter.
 
+TOO FAST OR TOO SLOW? Right-click the tray icon > "Dwell settings..." —
+three sliders control how long each pause takes. Changes apply instantly
+and are remembered.
+
 Suggestions above the keys: hover/click one to change the guess, or press
 Left/Right arrows. Backspace right after a word removes the whole word.
 Double-tap space = period. Shift key or auto-capitals after . ? !

@@ -85,6 +85,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SettingsWindow.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift"
         },
         {
@@ -132,6 +136,7 @@
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/KeyboardLayout.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Lexicon.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SettingsWindow.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TrackpadMonitor.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swift.o",
@@ -241,6 +246,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SettingsWindow.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector.swift.o"
         },
         {
@@ -274,6 +283,7 @@
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/KeyboardLayout.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Lexicon.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SelfTest.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SettingsWindow.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift",
@@ -306,6 +316,7 @@
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/KeyboardLayout.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Lexicon.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SelfTest.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SettingsWindow.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift",
@@ -443,6 +454,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SettingsWindow.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift"
         },
         {
@@ -518,6 +533,10 @@
         {
           "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SettingsWindow.swift.o"
         },
         {
           "kind" : "file",
