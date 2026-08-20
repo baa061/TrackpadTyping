@@ -63,6 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Emoji page state and usage-tracked recents.
     private var emojiMode = false
     private var emojiCategory = 0
+    /// The whole catalog as one scrollable strip: each category padded to a
+    /// full row so sections start on row boundaries.
+    private static let emojiCatalog: (cells: [String], startRows: [Int]) = {
+        var cells: [String] = []
+        var startRows: [Int] = []
+        for cat in EmojiData.categories {
+            startRows.append(cells.count / 10)
+            cells.append(contentsOf: cat.emoji)
+            while cells.count % 10 != 0 { cells.append("") }
+        }
+        return (cells, startRows)
+    }()
     private var emojiUsage: [String: [Double]] = [:]   // emoji -> [count, lastUsed]
 
     /// Hold-to-delete state: when the ⌫ key was pressed and how many repeats
@@ -666,18 +678,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             if let c = hud.emojiCategoryIndex(screenPoint: point) {
-                if c == emojiCategory {
-                    // Re-activating the current category pages through it —
-                    // scrolling for those who cannot scroll (dwell users).
-                    let page = hud.hudView.padRect.height
-                    let next = hud.hudView.emojiScroll + page
+                let ch = hud.hudView.padRect.height / 3
+                let sectionTop = CGFloat(Self.emojiCatalog.startRows[c]) * ch
+                if c == hud.hudView.emojiCategoryIndex {
+                    // Re-activating the current category pages onward through
+                    // the catalog — scrolling for those who cannot scroll.
+                    let next = hud.hudView.emojiScroll + hud.hudView.padRect.height
                     hud.hudView.emojiScroll = next > hud.hudView.emojiMaxScroll + 1 ? 0 : next
                 } else {
-                    emojiCategory = c
-                    hud.hudView.emojiCategoryIndex = c
-                    hud.hudView.emojiPage = EmojiData.categories[c].emoji
-                    hud.hudView.emojiScroll = 0
+                    hud.hudView.emojiScroll = sectionTop
                 }
+                emojiCategory = c
                 hud.refresh()
                 dumpUIState()
                 return true
@@ -808,7 +819,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setCandidates(active: false)
             hud.hudView.emojiCategoryIcons = EmojiData.categories.map { $0.icon }
             hud.hudView.emojiCategoryIndex = emojiCategory
-            hud.hudView.emojiPage = EmojiData.categories[emojiCategory].emoji
+            hud.hudView.emojiPage = Self.emojiCatalog.cells
+            hud.hudView.emojiCategoryStartRows = Self.emojiCatalog.startRows
             hud.hudView.candidates = recentEmoji(8).map { _ in "" }  // placeholder cleared below
             showEmojiRecents()
             updateHUD(candidates: hud.hudView.candidates, status: "emoji — ⌨ returns to letters")

@@ -21,8 +21,11 @@ final class HUDView: NSView {
     /// the bank row becomes the category selector.
     var emojiModeOn = false
     var emojiPage: [String] = []
-    /// Vertical scroll through the category, in points (0 = top).
+    /// Vertical scroll through the catalog, in points (0 = top).
     var emojiScroll: CGFloat = 0
+    /// Row where each category starts, for scroll-position highlighting and
+    /// jump-to-category.
+    var emojiCategoryStartRows: [Int] = []
     var emojiCategoryIcons: [String] = []
     var emojiCategoryIndex = 0
     /// Recent emoji shown in the candidate strip while in emoji mode.
@@ -63,7 +66,8 @@ final class HUDView: NSView {
 
     func emojiCellIndex(at viewPoint: NSPoint) -> Int? {
         guard emojiModeOn, padRect.contains(viewPoint) else { return nil }
-        for i in emojiPage.indices where emojiCellRect(i).contains(viewPoint) { return i }
+        for i in emojiPage.indices
+            where !emojiPage[i].isEmpty && emojiCellRect(i).contains(viewPoint) { return i }
         return nil
     }
     /// Chip frames from the last candidate-strip draw, for click hit-testing.
@@ -348,12 +352,24 @@ final class HUDView: NSView {
 
     private func drawEmojiGrid() {
         emojiScroll = min(max(emojiScroll, 0), emojiMaxScroll)
+        // The highlighted category tracks whatever section is at the top of
+        // the view — the icons are anchors into one continuous catalog.
+        if !emojiCategoryStartRows.isEmpty {
+            let ch = padRect.height / 3
+            let topRow = Int((emojiScroll + ch * 0.5) / ch)
+            var current = 0
+            for (c, start) in emojiCategoryStartRows.enumerated() where start <= topRow {
+                current = c
+            }
+            emojiCategoryIndex = current
+        }
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: layout.rowPitch * 0.52),
         ]
         NSGraphicsContext.current?.saveGraphicsState()
         NSBezierPath(rect: padRect).addClip()
         for (i, e) in emojiPage.enumerated() {
+            guard !e.isEmpty else { continue }
             let cell = emojiCellRect(i)
             guard cell.maxY > padRect.minY, cell.minY < padRect.maxY else { continue }
             NSColor(calibratedWhite: 0.20, alpha: 0.9).setFill()
