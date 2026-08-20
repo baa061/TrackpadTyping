@@ -60,6 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// cursor would otherwise "pick" whatever chip it happens to cover.
     private var controlCooldownUntil = Date.distantPast
 
+    /// Emoji page state and usage-tracked recents.
+    private var emojiMode = false
+    private var emojiCategory = 0
+    private var emojiUsage: [String: [Double]] = [:]   // emoji -> [count, lastUsed]
+
     /// Hold-to-delete state: when the ⌫ key was pressed and how many repeats
     /// have fired, which together drive the escalation schedule.
     private var deleteHeldSince: Date? = nil
@@ -151,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         layout = KeyboardLayout(keyPitch: config.screenKeyPitch, rowPitchRatio: config.rowPitchRatio)
         lexicon = Lexicon(config: config)
+        loadEmojiUsage()
         decoder = Decoder(layout: layout, lexicon: lexicon, config: config)
         recognizer = GestureRecognizer(config: config, keyPitch: layout.keyPitch)
         hud = HUDWindow(layout: layout, bottomMargin: CGFloat(config.panelBottomMargin))
@@ -412,6 +418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             flushReinforcement()
             stopHoverEngine()
+            if emojiMode { setEmojiMode(false) }
             tracing = false
             tracePath = []
             traceDwell = []
@@ -624,11 +631,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             chipPressed = nil
             if activateControl(at: mouseUp) { return }
-            if let p = path.last, hud.isInKeyArea(screenPoint: mouseUp),
+            if !emojiMode, let p = path.last, hud.isInKeyArea(screenPoint: mouseUp),
                       let ch = decoder.decodeTap(at: p) {
                 tapLetter(ch)
             }
-        } else {
+        } else if !emojiMode {
             let (cleaned, emphases) = EmphasisDetector.detect(
                 path: path, dwell: dwell, layout: layout, config: config)
             commitGlide(path: cleaned, emphases: emphases)
@@ -642,6 +649,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if hud.isInHoverToggle(screenPoint: point) {
             setHoverMode(!config.hoverMode)
             return true
+        }
+        if hud.isInEmojiToggle(screenPoint: point) {
+            setEmojiMode(!emojiMode)
+            return true
+        }
+        if emojiMode {
+            if let i = hud.emojiCellIndex(screenPoint: point),
+               i < hud.hudView.emojiPage.count {
+                insertEmoji(hud.hudView.emojiPage[i])
+                return true
+            }
+            if let c = hud.emojiCategoryIndex(screenPoint: point) {
+                emojiCategory = c
+                hud.hudView.emojiCategoryIndex = c
+                hud.hudView.emojiPage = EmojiData.categories[c].emoji
+                hud.refresh()
+                return true
+            }
+            if let idx = hud.candidateIndex(screenPoint: point),
+               idx < hud.hudView.candidates.count, lastCommit == nil {
+                insertEmoji(hud.hudView.candidates[idx])
+                return true
+            }
         }
         if hud.isInSpaceBar(screenPoint: point) {
             spaceBarTapped()
@@ -715,6 +745,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             erase(1)
             updateHUD(candidates: [], status: "⌫")
         }
+    }
+
+    // MARK: - Emoji
+
+    private var emojiUsageURL: URL {
+        Config.supportDirectory.appendingPathComponent("emoji-usage.json")
+    }
+
+    private func loadEmojiUsage() {
+        if let data = try? Data(contentsOf: emojiUsageURL),
+           let d = try? JSONDecoder().decode([String: [Double]].self, from: data) {
+            emojiUsage = d
+        }
+    }
+
+    private func recordEmojiUse(_ e: String) {
+        var entry = emojiUsage[e] ?? [0, 0]
+        entry[0] += 1
+        entry[1] = Date().timeIntervalSince1970
+        emojiUsage[e] = entry
+        if let data = try? JSONEncoder().encode(emojiUsage) {
+            try? data.write(to: emojiUsageURL, options: .atomic)
+        }
+    }
+
+    /// Usage-decayed recents, same half-life idea as the word bank.
+    private func recentEmoji(_ n: Int) -> [String] {
+        let now = Date().timeIntervalSince1970
+        return emojiUsage
+            .sorted { a, b in
+                func score(_ v: [Double]) -> Double {
+                    v[0] * pow(0.5, max(0, now - v[1]) / 86_400 / 10.0)
+                }
+                return score(a.value) > score(b.value)
+            }
+            .prefix(n).map { $0.key }
+    }
+
+    private func setEmojiMode(_ on: Bool) {
+        emojiMode = on
+        hud.hudView.emojiModeOn = on
+        if on {
+            flushReinforcement()
+            letterRun = ""
+            lastCommit = nil
+            setCandidates(active: false)
+            hud.hudView.emojiCategoryIcons = EmojiData.categories.map { $0.icon }
+            hud.hudView.emojiCategoryIndex = emojiCategory
+            hud.hudView.emojiPage = EmojiData.categories[emojiCategory].emoji
+            hud.hudView.candidates = recentEmoji(8).map { _ in "" }  // placeholder cleared below
+            showEmojiRecents()
+            updateHUD(candidates: hud.hudView.candidates, status: "emoji — ⌨ returns to letters")
+        } else {
+            hud.hudView.emojiPage = []
+            updateHUD(candidates: [], status: "")
+        }
+        hud.refresh()
+    }
+
+    private func showEmojiRecents() {
+        hud.hudView.candidates = recentEmoji(8)
+        hud.hudView.selectedIndex = -1
+        hud.hudView.candidateOffset = 0
+    }
+
+    private func insertEmoji(_ e: String) {
+        injectWordSeparatorIfNeeded()
+        inject(e)
+        recordEmojiUse(e)
+        if emojiMode { showEmojiRecents() }
+        setStatusOnly(e)
+    }
+
+    private func setStatusOnly(_ text: String) {
+        hud.hudView.statusText = text
+        hud.refresh()
+        dumpUIState()
     }
 
     // MARK: - Hover (click-free) input
@@ -802,6 +909,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dwellTargetTime += dt
         let ms = dwellTargetTime * 1000
 
+        if token == "key" && emojiMode { return }
         if token == "key" {
             // Letters arm a trace rather than firing like a control.
             showDwellProgress(at: screen, fraction: ms / config.hoverStartDwellMS)
@@ -986,6 +1094,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// takes a click or the hotkey.
     private func dwellToken(at screen: NSPoint) -> String? {
         if hud.isInHoverToggle(screenPoint: screen) { return nil }
+        if hud.isInEmojiToggle(screenPoint: screen) { return "emojiToggle" }
+        if emojiMode {
+            if let i = hud.emojiCellIndex(screenPoint: screen) { return "ecell\(i)" }
+            if let c = hud.emojiCategoryIndex(screenPoint: screen) { return "ecat\(c)" }
+            if let idx = hud.candidateIndex(screenPoint: screen) { return "erec\(idx)" }
+        }
         if hud.isInSpaceBar(screenPoint: screen) { return "space" }
         if let i = hud.punctuationIndex(screenPoint: screen) { return "punct\(i)" }
         if let r = hud.typedWordRange(screenPoint: screen) { return "typed\(r.lowerBound)" }
@@ -1097,6 +1211,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 index: 0,
                                 capitalized: word != best.word,
                                 insertedLength: text.count)
+        }
+        // A word with an emoji alias carries the emoji as one extra chip:
+        // glide "fire", and 🔥 is one pick away.
+        for name in lastCommit!.candidates.prefix(3) {
+            if let e = EmojiData.aliases[name], !lastCommit!.candidates.contains(e) {
+                // Right after the top word, so it is visible without scrolling.
+                lastCommit!.candidates.insert(e, at: min(1, lastCommit!.candidates.count))
+                break
+            }
         }
         pendingReinforce = best.word
         setCandidates(active: true)
@@ -1472,6 +1595,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                             "range": [$0.1.lowerBound, $0.1.upperBound]] },
             "spaceBar": screen(hud.hudView.spaceBarRect),
             "hoverToggle": screen(hud.hudView.hoverToggleRect),
+            "emojiToggle": screen(hud.hudView.emojiToggleRect),
+            "emojiMode": emojiMode,
+            "emojiPage": hud.hudView.emojiPage,
+            "emojiCells": hud.hudView.emojiPage.indices.map { screen(hud.hudView.emojiCellRect($0)) },
             "deleteKey": screen(hud.hudView.deleteKeyRect),
             "keys": keys,
         ]

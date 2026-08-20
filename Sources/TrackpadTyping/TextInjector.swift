@@ -28,13 +28,19 @@ final class TextInjector {
         let units = Array(text.utf16)
         var i = 0
         while i < units.count {
-            var chunk = Array(units[i..<min(i + chunkSize, units.count)])
+            var end = min(i + chunkSize, units.count)
+            // Never split a surrogate pair across chunks: a high surrogate at
+            // the boundary would corrupt any non-BMP character (emoji).
+            if end < units.count, (0xD800...0xDBFF).contains(units[end - 1]) {
+                end += 1
+            }
+            var chunk = Array(units[i..<end])
             for isDown in [true, false] {
                 let e = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: isDown)
                 e?.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: &chunk)
                 post(e)
             }
-            i += chunkSize
+            i = end
         }
     }
 

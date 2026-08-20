@@ -34,6 +34,12 @@
     "swift-dependencies": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Diagnostics.swiftdeps",
     "diagnostics": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Diagnostics.dia"
   },
+  "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EmojiData.swift": {
+    "object": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EmojiData.swift.o",
+    "swiftmodule": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EmojiData~partial.swiftmodule",
+    "swift-dependencies": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EmojiData.swiftdeps",
+    "diagnostics": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EmojiData.dia"
+  },
   "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift": {
     "object": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EventTapController.swift.o",
     "swiftmodule": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EventTapController~partial.swiftmodule",

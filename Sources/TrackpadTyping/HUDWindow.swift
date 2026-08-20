@@ -17,6 +17,14 @@ final class HUDView: NSView {
     var bankWords: [String] = []
     /// Click-free (dwell) input mode indicator + toggle.
     var hoverModeOn = false
+    /// Emoji page state: when on, the letter grid area draws emoji cells and
+    /// the bank row becomes the category selector.
+    var emojiModeOn = false
+    var emojiPage: [String] = []
+    var emojiCategoryIcons: [String] = []
+    var emojiCategoryIndex = 0
+    /// Recent emoji shown in the candidate strip while in emoji mode.
+    var emojiRecents: [String] = []
     /// True while a hover-mode trace is being recorded — tints the grid.
     var hoverTracingActive = false
     /// Dwell feedback ring: view-space point and fill fraction (0 hides it).
@@ -25,10 +33,31 @@ final class HUDView: NSView {
     static let hoverToggleWidth: CGFloat = 58
 
     var hoverToggleRect: NSRect {
-        let top = bounds.height - bounds.height   // silence unused warnings pattern
-        _ = top
-        return NSRect(x: Self.margin, y: 4 + 2,
-                      width: Self.hoverToggleWidth, height: Self.bankHeight - 12)
+        NSRect(x: Self.margin, y: 4 + 2,
+               width: Self.hoverToggleWidth, height: Self.bankHeight - 12)
+    }
+
+    static let emojiToggleWidth: CGFloat = 34
+    var emojiToggleRect: NSRect {
+        NSRect(x: Self.margin + Self.hoverToggleWidth + 4, y: 4 + 2,
+               width: Self.emojiToggleWidth, height: Self.bankHeight - 12)
+    }
+
+    /// One emoji cell of the 10x3 grid occupying the letter-key area.
+    func emojiCellRect(_ i: Int) -> NSRect {
+        let r = padRect
+        let cw = r.width / 10
+        let ch = r.height / 3
+        let col = CGFloat(i % 10), row = CGFloat(i / 10)   // row 0 = top
+        return NSRect(x: r.minX + col * cw + 2,
+                      y: r.maxY - (row + 1) * ch + 2,
+                      width: cw - 4, height: ch - 4)
+    }
+
+    func emojiCellIndex(at viewPoint: NSPoint) -> Int? {
+        guard emojiModeOn else { return nil }
+        for i in emojiPage.indices where emojiCellRect(i).contains(viewPoint) { return i }
+        return nil
     }
     /// Chip frames from the last candidate-strip draw, for click hit-testing.
     private(set) var candidateRects: [NSRect] = []
@@ -109,10 +138,11 @@ final class HUDView: NSView {
         }
     }
 
-    /// Equal-width slots along the bottom edge, right of the hover toggle.
+    /// Equal-width slots along the bottom edge, right of the toggles. In
+    /// emoji mode these are the category chips.
     func bankSlotRect(_ i: Int) -> NSRect {
-        let left = Self.margin + Self.hoverToggleWidth + 6
-        let count = max(bankWords.count, 1)
+        let left = Self.margin + Self.hoverToggleWidth + Self.emojiToggleWidth + 8
+        let count = max(emojiModeOn ? emojiCategoryIcons.count : bankWords.count, 1)
         let w = (bounds.width - left - Self.margin) / CGFloat(count)
         return NSRect(x: left + CGFloat(i) * w, y: 4,
                       width: w, height: Self.bankHeight - 6)
@@ -156,12 +186,21 @@ final class HUDView: NSView {
             NSString(string: "▲ type").draw(at: NSPoint(x: padRect.maxX - 48, y: y + 3),
                                             withAttributes: attrs)
         }
-        drawKeys()
+        if emojiModeOn {
+            drawEmojiGrid()
+        } else {
+            drawKeys()
+        }
         drawDeleteKey(active: deleteActive)
         drawSpaceBar()
         drawPunctuation()
         drawHoverToggle()
-        drawBank()
+        drawEmojiToggle()
+        if emojiModeOn {
+            drawEmojiCategories()
+        } else {
+            drawBank()
+        }
         drawTrace()
         drawDwellRing()
     }
@@ -283,6 +322,50 @@ final class HUDView: NSView {
         let size = s.size(withAttributes: attrs)
         s.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
                withAttributes: attrs)
+    }
+
+    private func drawEmojiToggle() {
+        let r = emojiToggleRect
+        if emojiModeOn {
+            NSColor(calibratedRed: 0.24, green: 0.5, blue: 0.95, alpha: 0.95).setFill()
+        } else {
+            NSColor(calibratedWhite: 0.24, alpha: 0.95).setFill()
+        }
+        NSBezierPath(roundedRect: r, xRadius: 7, yRadius: 7).fill()
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 15)]
+        let s = NSString(string: emojiModeOn ? "⌨" : "😀")
+        let size = s.size(withAttributes: attrs)
+        s.draw(at: NSPoint(x: r.midX - size.width / 2, y: r.midY - size.height / 2),
+               withAttributes: attrs)
+    }
+
+    private func drawEmojiGrid() {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: layout.rowPitch * 0.52),
+        ]
+        for (i, e) in emojiPage.enumerated() {
+            let cell = emojiCellRect(i)
+            NSColor(calibratedWhite: 0.20, alpha: 0.9).setFill()
+            NSBezierPath(roundedRect: cell, xRadius: 6, yRadius: 6).fill()
+            let s = NSString(string: e)
+            let size = s.size(withAttributes: attrs)
+            s.draw(at: NSPoint(x: cell.midX - size.width / 2, y: cell.midY - size.height / 2),
+                   withAttributes: attrs)
+        }
+    }
+
+    private func drawEmojiCategories() {
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 15)]
+        for (i, icon) in emojiCategoryIcons.enumerated() {
+            let r = bankSlotRect(i)
+            NSColor(calibratedWhite: i == emojiCategoryIndex ? 0.32 : 0.19,
+                    alpha: 0.95).setFill()
+            NSBezierPath(roundedRect: r, xRadius: 7, yRadius: 7).fill()
+            let s = NSString(string: icon)
+            let size = s.size(withAttributes: attrs)
+            s.draw(at: NSPoint(x: r.midX - size.width / 2, y: r.midY - size.height / 2),
+                   withAttributes: attrs)
+        }
     }
 
     private func drawHoverToggle() {
@@ -573,6 +656,20 @@ final class HUDWindow: NSPanel {
 
     func isInHoverToggle(screenPoint p: NSPoint) -> Bool {
         hudView.hoverToggleRect.contains(viewPoint(p))
+    }
+
+    func isInEmojiToggle(screenPoint p: NSPoint) -> Bool {
+        hudView.emojiToggleRect.contains(viewPoint(p))
+    }
+
+    func emojiCellIndex(screenPoint p: NSPoint) -> Int? {
+        hudView.emojiCellIndex(at: viewPoint(p))
+    }
+
+    func emojiCategoryIndex(screenPoint p: NSPoint) -> Int? {
+        guard hudView.emojiModeOn else { return nil }
+        let v = viewPoint(p)
+        return hudView.emojiCategoryIcons.indices.first { hudView.bankSlotRect($0).contains(v) }
     }
 
     func isInSpaceBar(screenPoint p: NSPoint) -> Bool {

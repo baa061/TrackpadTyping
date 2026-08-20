@@ -57,6 +57,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EmojiData.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift"
         },
         {
@@ -129,6 +133,7 @@
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Config.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Decoder.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Diagnostics.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EmojiData.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EventTapController.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Geometry.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/GestureRecognizer.swift.o",
@@ -218,6 +223,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EmojiData.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EventTapController.swift.o"
         },
         {
@@ -276,6 +285,7 @@
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Config.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Decoder.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Diagnostics.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EmojiData.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Geometry.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/GestureRecognizer.swift",
@@ -309,6 +319,7 @@
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Config.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Decoder.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Diagnostics.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EmojiData.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Geometry.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/GestureRecognizer.swift",
@@ -426,6 +437,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EmojiData.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/EventTapController.swift"
         },
         {
@@ -505,6 +520,10 @@
         {
           "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/Diagnostics.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/EmojiData.swift.o"
         },
         {
           "kind" : "file",
