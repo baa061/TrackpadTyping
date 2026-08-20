@@ -1,2 +1,4 @@
 pc/TrackpadTyping.exe
 .DS_Store
+.build/
+TrackpadTyping.app/

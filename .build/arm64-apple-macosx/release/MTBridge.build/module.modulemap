@@ -1,4 +1,0 @@
-module MTBridge {
-    umbrella header "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/MTBridge/include/MTBridge.h"
-    export *
-}

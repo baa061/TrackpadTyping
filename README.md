@@ -186,3 +186,11 @@ Sources/TrackpadTyping/
 - One keyboard size/position (bottom-centre of the main screen).
 - `MultitouchSupport` is a private framework — stable for over a decade and
   verified on macOS 26.5, but Apple owes it no compatibility.
+
+## License
+
+MIT (see `LICENSE`). The bundled word-frequency list
+(`Sources/TrackpadTyping/Resources/lexicon-en.txt`, mirrored in
+`pc/resources/`) is derived from
+[hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords)
+and remains under CC-BY-SA 4.0.
