@@ -7,7 +7,7 @@ struct Config: Codable {
     // Layout ---------------------------------------------------------------
     /// Size of one key on screen, in points. This sets the size of the whole
     /// keyboard panel: ten keys across, three rows down.
-    var screenKeyPitch: Double = 40
+    var screenKeyPitch: Double = 36
     /// Row spacing as a multiple of key width. Taller rows measurably cut
     /// row-confusion errors (the decoder's dominant failure mode); 1.6 is the
     /// sweep's sweet spot between accuracy and screen space.

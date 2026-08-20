@@ -3,9 +3,22 @@
 <plist version="1.0">
 <dict>
 	<key>files</key>
-	<dict/>
+	<dict>
+		<key>Resources/TrackpadTyping_TrackpadTyping.bundle/lexicon-en.txt</key>
+		<data>
+		3qcoGd8jMJKo0AyhL0utHRoCwrU=
+		</data>
+	</dict>
 	<key>files2</key>
-	<dict/>
+	<dict>
+		<key>Resources/TrackpadTyping_TrackpadTyping.bundle/lexicon-en.txt</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			ozWJHeY+ajRs9HMoW6tHoUCGr2QppCjc41qz72iA6Po=
+			</data>
+		</dict>
+	</dict>
 	<key>rules</key>
 	<dict>
 		<key>^Resources/</key>

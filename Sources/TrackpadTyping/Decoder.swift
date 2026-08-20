@@ -325,6 +325,21 @@ enum EmphasisDetector {
             while j < path.count - 1, arc[j] - arc[i] < pitch * 4.0 {
                 let turn = abs(turnPrefix[min(j + 1, turnPrefix.count - 1)] - turnPrefix[i + 1])
                 if turn >= config.loopMinTurn, path[i].distance(to: path[j]) < pitch * 0.6 {
+                    // A drawn loop is *round*: its enclosed area is large
+                    // relative to its perimeter (isoperimetric ratio near 1).
+                    // A zigzag switchback (l→e→t→s in "lets") racks up turning
+                    // and passes close to its own outbound stroke, but its
+                    // sliver is stretched thin — ratio ~0.3. Without this
+                    // check the switchback hallucinates an emphasis on
+                    // whatever key sits inside it, poisoning the candidates.
+                    var area = 0.0
+                    for k in i..<j {
+                        area += path[k].x * path[k + 1].y - path[k + 1].x * path[k].y
+                    }
+                    area += path[j].x * path[i].y - path[i].x * path[j].y
+                    let perimeter = arc[j] - arc[i] + path[i].distance(to: path[j])
+                    let roundness = 4 * Double.pi * abs(area) / 2 / max(perimeter * perimeter, 1e-9)
+                    guard roundness >= 0.5 else { j += 1; continue }
                     var cx = 0.0, cy = 0.0
                     for k in i...j { cx += path[k].x; cy += path[k].y }
                     let c = Pt(x: cx / Double(j - i + 1), y: cy / Double(j - i + 1))

@@ -1056,9 +1056,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private var debugLastDecode: [String: Any] = [:]
+
     private func commitGlide(path: [Pt], emphases: [Emphasis] = []) {
         letterRun = ""
         let candidates = decoder.decode(path: path, emphases: emphases)
+        if debugUI {
+            debugLastDecode = [
+                "emphases": emphases.map { "\($0.letter)@\(String(format: "%.2f", $0.t))" },
+                "scored": candidates.prefix(8).map {
+                    ["w": $0.word, "s": Int($0.score), "sh": Int($0.shape), "lo": Int($0.location)]
+                },
+                "pathPoints": path.count,
+                "pathLen": Int(Geometry.pathLength(path)),
+            ]
+        }
         guard let best = candidates.first,
               best.score <= config.maxScoreKeys * layout.keyPitch else {
             // Typing the least-bad word from an unrecognizable trace would be
@@ -1455,6 +1467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "status": hud.hudView.statusText,
             "candidates": hud.hudView.candidates,
             "candidateRects": hud.hudView.candidateRects.map(screen),
+            "lastDecode": debugLastDecode,
             "typedWords": hud.hudView.typedWordRects.map { ["rect": screen($0.0),
                                                             "range": [$0.1.lowerBound, $0.1.upperBound]] },
             "spaceBar": screen(hud.hudView.spaceBarRect),

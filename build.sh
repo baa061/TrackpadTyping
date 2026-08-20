@@ -31,6 +31,10 @@ trap 'rm -rf "$(dirname "$STAGE")"' EXIT
 echo "==> Assembling $APP (staged)"
 mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
 cp -X "$BIN" "$STAGE/Contents/MacOS/TrackpadTyping"
+# The lexicon ships inside the bundle. Without this, Bundle.module falls back
+# to an absolute path into .build/ — which works on the build machine until a
+# clean, then silently downgrades the app to the 1,300-word embedded list.
+cp -RX .build/release/TrackpadTyping_TrackpadTyping.bundle "$STAGE/Contents/Resources/"
 
 cat > "$STAGE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

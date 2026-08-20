@@ -555,6 +555,16 @@ detectEmphases(const std::vector<Pt>& path, const std::vector<double>& dwell,
         while (j + 1 < path.size() && arc[j] - arc[i] < pitch * 4.0) {
             double turn = std::fabs(turnPrefix[std::min(j + 1, turnPrefix.size() - 1)] - turnPrefix[i + 1]);
             if (turn >= config.loopMinTurn && path[i].dist(path[j]) < pitch * 0.6) {
+                // real loops are round; switchbacks are thin slivers
+                // (isoperimetric ratio — see Swift original)
+                double area = 0;
+                for (size_t k = i; k < j; k++)
+                    area += path[k].x * path[k+1].y - path[k+1].x * path[k].y;
+                area += path[j].x * path[i].y - path[i].x * path[j].y;
+                double perim = (arc[j] - arc[i]) + path[i].dist(path[j]);
+                double roundness = 4 * 3.14159265 * std::fabs(area) / 2 /
+                                   std::max(perim * perim, 1e-9);
+                if (roundness < 0.5) { j++; continue; }
                 Pt c;
                 for (size_t k = i; k <= j; k++) { c.x += path[k].x; c.y += path[k].y; }
                 c.x /= (j - i + 1); c.y /= (j - i + 1);
