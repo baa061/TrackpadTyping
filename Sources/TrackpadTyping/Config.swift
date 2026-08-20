@@ -115,6 +115,17 @@ struct Config: Codable {
     /// Move the pointer onto the keyboard when glide mode turns on, and put it
     /// back where it was when it turns off.
     var warpPointerOnActivate: Bool = true
+
+    // Hover (click-free) input -------------------------------------------
+    /// Trace words with dwell alone: pause to start a word, sweep, pause to
+    /// commit; travel between words is never recorded. For users who cannot
+    /// hold a click.
+    var hoverMode: Bool = false
+    /// Stillness that starts a word while traveling (ms).
+    var hoverStartDwellMS: Double = 450
+    /// Stillness that commits the word while tracing (ms). Must exceed
+    /// pauseMinMS comfortably, so mid-word emphasis pauses stay distinct.
+    var hoverCommitDwellMS: Double = 650
     /// Keep the pointer confined to the keyboard panel while glide mode is on.
     /// Without this the cursor drifts off the panel word by word until every
     /// trace decodes as garbage from a screen corner.

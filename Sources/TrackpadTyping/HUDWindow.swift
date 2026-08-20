@@ -15,6 +15,16 @@ final class HUDView: NSView {
     var candidateOffset: CGFloat = 0
     var statusText: String = ""
     var bankWords: [String] = []
+    /// Click-free (dwell) input mode indicator + toggle.
+    var hoverModeOn = false
+    static let hoverToggleWidth: CGFloat = 58
+
+    var hoverToggleRect: NSRect {
+        let top = bounds.height - bounds.height   // silence unused warnings pattern
+        _ = top
+        return NSRect(x: Self.margin, y: 4 + 2,
+                      width: Self.hoverToggleWidth, height: Self.bankHeight - 12)
+    }
     /// Chip frames from the last candidate-strip draw, for click hit-testing.
     private(set) var candidateRects: [NSRect] = []
 
@@ -94,11 +104,12 @@ final class HUDView: NSView {
         }
     }
 
-    /// Equal-width slots spanning the panel's bottom edge.
+    /// Equal-width slots along the bottom edge, right of the hover toggle.
     func bankSlotRect(_ i: Int) -> NSRect {
+        let left = Self.margin + Self.hoverToggleWidth + 6
         let count = max(bankWords.count, 1)
-        let w = (bounds.width - Self.margin * 2) / CGFloat(count)
-        return NSRect(x: Self.margin + CGFloat(i) * w, y: 4,
+        let w = (bounds.width - left - Self.margin) / CGFloat(count)
+        return NSRect(x: left + CGFloat(i) * w, y: 4,
                       width: w, height: Self.bankHeight - 6)
     }
 
@@ -122,6 +133,7 @@ final class HUDView: NSView {
         drawDeleteKey(active: deleteActive)
         drawSpaceBar()
         drawPunctuation()
+        drawHoverToggle()
         drawBank()
         drawTrace()
     }
@@ -242,6 +254,24 @@ final class HUDView: NSView {
         let s = NSString(string: "space")
         let size = s.size(withAttributes: attrs)
         s.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+               withAttributes: attrs)
+    }
+
+    private func drawHoverToggle() {
+        let r = hoverToggleRect
+        if hoverModeOn {
+            NSColor(calibratedRed: 0.24, green: 0.62, blue: 0.42, alpha: 0.95).setFill()
+        } else {
+            NSColor(calibratedWhite: 0.24, alpha: 0.95).setFill()
+        }
+        NSBezierPath(roundedRect: r, xRadius: 7, yRadius: 7).fill()
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: hoverModeOn ? NSColor.white : NSColor(calibratedWhite: 0.62, alpha: 1),
+        ]
+        let s = NSString(string: "hover")
+        let size = s.size(withAttributes: attrs)
+        s.draw(at: NSPoint(x: r.midX - size.width / 2, y: r.midY - size.height / 2),
                withAttributes: attrs)
     }
 
@@ -495,6 +525,10 @@ final class HUDWindow: NSPanel {
     func candidateIndex(screenPoint p: NSPoint) -> Int? {
         let v = viewPoint(p)
         return hudView.candidateRects.firstIndex { !$0.isEmpty && $0.contains(v) }
+    }
+
+    func isInHoverToggle(screenPoint p: NSPoint) -> Bool {
+        hudView.hoverToggleRect.contains(viewPoint(p))
     }
 
     func isInSpaceBar(screenPoint p: NSPoint) -> Bool {

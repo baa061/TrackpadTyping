@@ -31,6 +31,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the cursor to the panel origin, so the panel doesn't jump on grab.
     private var dragOffset: NSPoint? = nil
 
+    /// Hover (click-free) input: words are delimited by stillness instead of
+    /// clicks. `hoverTracing` is the machine's state — false means traveling,
+    /// where movement is deliberately not recorded.
+    private var dwellTimer: Timer?
+    private var hoverTracing = false
+    private var hoverPath: [Pt] = []
+    private var hoverDwell: [Double] = []
+    private var hoverLastPos: Pt? = nil
+    private var hoverStillTime = 0.0
+
     /// Hold-to-delete state: when the ⌫ key was pressed and how many repeats
     /// have fired, which together drive the escalation schedule.
     private var deleteHeldSince: Date? = nil
@@ -306,6 +316,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               ⌫ key                          — backspace; right after a glide it
                                                removes the whole word; hold for more
               Hold the top grab bar          — move the keyboard
+              "hover" toggle (bottom left)   — click-free mode: pause on a
+                                               letter to start a word, sweep,
+                                               pause again to type it
               Two fingers, tap               — cycle to the next candidate
               Two fingers, scroll sideways   — scroll the suggestions
               Two fingers, swipe down        — delete the last word
@@ -354,10 +367,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             refreshBank()
             startHoverTracking()
+            hud.hudView.hoverModeOn = config.hoverMode
+            if config.hoverMode { startHoverEngine() }
             hud.refresh()
             dumpUIState()
         } else {
             flushReinforcement()
+            stopHoverEngine()
             tracing = false
             tracePath = []
             traceDwell = []
@@ -569,6 +585,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             chipPressed = nil
+            if hud.isInHoverToggle(screenPoint: mouseUp) {
+                setHoverMode(!config.hoverMode)
+                return
+            }
             if hud.isInSpaceBar(screenPoint: mouseUp) {
                 spaceBarTapped()
             } else if let punct = hud.punctuationIndex(screenPoint: mouseUp) {
@@ -610,6 +630,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let (cleaned, emphases) = EmphasisDetector.detect(
                 path: path, dwell: dwell, layout: layout, config: config)
             commitGlide(path: cleaned, emphases: emphases)
+        }
+    }
+
+    // MARK: - Hover (click-free) input
+
+    private func setHoverMode(_ on: Bool) {
+        config.hoverMode = on
+        config.save()
+        hud.hudView.hoverModeOn = on
+        stopHoverEngine()
+        if on && glideMode { startHoverEngine() }
+        updateHUD(candidates: [], status: on ? "hover mode — pause on a letter to start" : "")
+    }
+
+    private func startHoverEngine() {
+        hoverTracing = false
+        hoverPath = []
+        hoverDwell = []
+        hoverLastPos = nil
+        hoverStillTime = 0
+        dwellTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+            self?.hoverTick()
+        }
+    }
+
+    private func stopHoverEngine() {
+        dwellTimer?.invalidate()
+        dwellTimer = nil
+        hoverTracing = false
+        hoverPath = []
+        hoverDwell = []
+        hud.hudView.livePath = []
+    }
+
+    private func hoverTick() {
+        guard glideMode, config.hoverMode else { return }
+        // A held click means the user is click-tracing or using a control;
+        // the dwell machine stands down for its duration.
+        guard !tracing, deleteHeldSince == nil, dragOffset == nil else {
+            hoverStillTime = 0
+            return
+        }
+
+        let dt = 1.0 / 120.0
+        let p = hud.toLayout(screenPoint: NSEvent.mouseLocation)
+        let moved = hoverLastPos.map { $0.distance(to: p) > 0.5 } ?? true
+        hoverStillTime = moved ? 0 : hoverStillTime + dt
+        hoverLastPos = p
+
+        if !hoverTracing {
+            // TRAVELING: nothing is recorded — this is the erasure of the
+            // between-words swipe. Stillness over the letter grid arms a word.
+            if hoverStillTime * 1000 >= config.hoverStartDwellMS,
+               hud.isInKeyArea(screenPoint: NSEvent.mouseLocation) {
+                hoverTracing = true
+                hoverPath = [p]
+                hoverDwell = [0]
+                hoverStillTime = 0
+                setCandidates(active: false)
+                flushReinforcement()
+                updateHUD(candidates: [], status: "tracing — pause to finish")
+            }
+            return
+        }
+
+        // TRACING: same recording as a click-held trace, dwell included so
+        // mid-word emphasis pauses keep working.
+        if moved {
+            hoverPath.append(p)
+            hoverDwell.append(0)
+            hud.hudView.livePath = hoverPath
+            hud.refresh()
+        } else if !hoverDwell.isEmpty {
+            hoverDwell[hoverDwell.count - 1] += dt
+        }
+
+        if hoverStillTime * 1000 >= config.hoverCommitDwellMS {
+            hoverTracing = false
+            let path = hoverPath
+            let dwell = hoverDwell
+            hoverPath = []
+            hoverDwell = []
+            hoverStillTime = 0
+            hud.hudView.livePath = []
+
+            if Geometry.pathLength(path) < config.tapMaxTravelKeys * layout.keyPitch {
+                // A start-dwell followed by continued stillness: one letter.
+                if let last = path.last, let ch = decoder.decodeTap(at: last) {
+                    if letterRun.isEmpty { letterRunCapitalized = shiftPending }
+                    inject(applyCase(String(ch)))
+                    letterRun.append(ch)
+                    offerCompletions()
+                }
+            } else {
+                let (cleaned, emphases) = EmphasisDetector.detect(
+                    path: path, dwell: dwell, layout: layout, config: config)
+                commitGlide(path: cleaned, emphases: emphases)
+            }
         }
     }
 
@@ -742,6 +860,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// switch would chew through text in the newly focused app.
     private func resetTypingContext(status: String) {
         tracing = false
+        hoverTracing = false
+        hoverPath = []
+        hoverDwell = []
         dragOffset = nil
         deleteHeldSince = nil
         deleteRepeats = 0
