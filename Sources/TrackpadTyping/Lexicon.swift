@@ -275,23 +275,35 @@ final class Lexicon {
     /// half-life a word keeps its slot exactly as long as it keeps earning it.
     func topUsed(_ n: Int) -> [String] {
         let now = Date().timeIntervalSince1970
-        func score(_ e: LearnedWord) -> Double {
+        // Distinctiveness weighting: every sentence contains "the" and "is",
+        // so raw counts hand the bank permanently to function words — the
+        // least useful shortcuts there are (short, easy to glide, never
+        // misrecognized). Scaling by global rarity makes the bank surface
+        // vocabulary that is frequent *for this user*: names, jargon,
+        // project words — the ones worth one-click access.
+        func score(_ w: String, _ e: LearnedWord) -> Double {
             let ageDays = max(0, now - e.lastUsed) / 86_400
-            return Double(e.count) * pow(0.5, ageDays / 10.0)
+            let recencyScore = Double(e.count) * pow(0.5, ageDays / 10.0)
+            let rank = indexOfWord[w].map { exp(-basePrior[$0]) - 1 } ?? config.fallbackRank
+            return recencyScore * min(1.0, rank / 800.0)
         }
         var out = learned
             .sorted { a, b in
-                let sa = score(a.value), sb = score(b.value)
+                let sa = score(a.key, a.value), sb = score(b.key, b.value)
                 if sa != sb { return sa > sb }
                 return (indexOfWord[a.key] ?? .max) < (indexOfWord[b.key] ?? .max)
             }
             .map { $0.key }
         if out.count < n {
             var seen = Set(out)
-            for w in CommonWords.ordered where !seen.contains(w) {
+            for (i, w) in words.enumerated() where i >= 800 && isCore[i] && !seen.contains(w) {
                 out.append(w)
                 seen.insert(w)
                 if out.count == n { break }
+            }
+            for w in CommonWords.ordered where !seen.contains(w) && out.count < n {
+                out.append(w)
+                seen.insert(w)
             }
         }
         return Array(out.prefix(n))
