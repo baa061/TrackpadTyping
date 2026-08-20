@@ -18,6 +18,7 @@ final class Lexicon {
     /// frequencies, unlike the archaic dictionary tail — they pay a reduced
     /// penalty rather than the full junk rate.
     private(set) var isMidTier: [Bool] = []
+    private var baseMidTier: [Bool] = []
 
     /// words[] indices bucketed by (first letter, last letter). Endpoint
     /// pruning is what makes the search cheap: a glide's start and end are its
@@ -83,6 +84,7 @@ final class Lexicon {
         baseCore.append(core)
         isCore.append(core)
         isMidTier.append(midTier)
+        baseMidTier.append(midTier)
         buckets[key].append(idx)
         indexOfWord[word] = idx
     }
@@ -116,7 +118,11 @@ final class Lexicon {
                 let core = rank < 3_000
                         || (rank < 9_000 && dictionary.contains(w))
                         || curated.contains(w)
-                add(w, rank: rank, core: core, midTier: !core)
+                // Three price bands: core rides free, the mid tail pays a
+                // little, and the deep tail (rare names, "bulbasaur") pays
+                // the full fallback rate — present and learnable, but unable
+                // to tax everyday words.
+                add(w, rank: rank, core: core, midTier: !core && rank < 50_000)
                 rank += 1
             }
         }
@@ -212,6 +218,10 @@ final class Lexicon {
     /// use should make a word competitive, not make it beat everything.
     private func applyLearnedPrior(_ word: String) {
         guard let idx = indexOfWord[word], let entry = learned[word] else { return }
+        // One real use lifts a deep-tail word ("bulbasaur") to the mid price
+        // band immediately — personal vocabulary shouldn't need a probation
+        // period just to be typeable, only full core promotion does.
+        if !isCore[idx] { isMidTier[idx] = true }
         let boost = Foundation.log(1.0 + Double(entry.count)) * 1.2
         // Promotion out of the fallback tier requires use in more than one
         // session. A single session isn't vocabulary — it is one afternoon's
@@ -246,11 +256,17 @@ final class Lexicon {
         if let idx = indexOfWord[word] {
             logPrior[idx] = basePrior[idx]
             isCore[idx] = baseCore[idx]
+            isMidTier[idx] = baseMidTier[idx]
         }
         persistLearned()
     }
 
     func isLearned(_ word: String) -> Bool { learned[word.lowercased()] != nil }
+
+    func isDeepTier(_ word: String) -> Bool {
+        guard let idx = indexOfWord[word.lowercased()] else { return false }
+        return !isCore[idx] && !isMidTier[idx]
+    }
 
     func contains(_ word: String) -> Bool { indexOfWord[word.lowercased()] != nil }
 

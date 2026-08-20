@@ -60,6 +60,15 @@ struct Config: Codable {
     var loopMinTurn: Double = 5.0
     /// How close (key pitches) an emphasis must be to a key centre to bind.
     var emphasisRadiusKeys: Double = 0.8
+    /// If no rare (deep-tier) word makes the candidate strip on its own, the
+    /// best one within this range of the top score takes the last chip —
+    /// keeping "bulbasaur" one deliberate pick away without letting it tax
+    /// everyday words' rankings.
+    var deepSlotMarginKeys: Double = 2.5
+    /// A deep-tier (rare) word may only take the top spot by beating the best
+    /// common-tier candidate by this margin (key pitches); otherwise it ranks
+    /// second. Rare words stay reachable without taxing everyday typing.
+    var deepTierMarginKeys: Double = 0.35
     /// Penalty (key pitches) for a candidate lacking an emphasized letter
     /// near the emphasized position.
     var emphasisMissPenaltyKeys: Double = 1.5

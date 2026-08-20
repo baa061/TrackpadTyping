@@ -269,7 +269,36 @@ final class Decoder {
         }
 
         results.sort { $0.score < $1.score }
-        return Array(results.prefix(config.candidateCount))
+
+        // Tie protection: a rare (deep-tier) word may only outrank everyday
+        // vocabulary decisively. Near-ties go to the common word; the rare one
+        // stays one chip away, and using it once promotes it out of this rule.
+        if let first = results.first, lexicon.isDeepTier(first.word) {
+            let margin = config.deepTierMarginKeys * layout.keyPitch
+            if let shallowIdx = results.firstIndex(where: { !lexicon.isDeepTier($0.word) }),
+               shallowIdx > 0,
+               results[shallowIdx].score - first.score < margin {
+                let shallow = results.remove(at: shallowIdx)
+                results.insert(shallow, at: 0)
+            }
+        }
+
+        var top = Array(results.prefix(config.candidateCount))
+
+        // Reserved rare-word slot: the penalty that keeps the deep tail from
+        // taxing common words also keeps it off the strip entirely — which
+        // would make rare words unpickable and therefore unlearnable. The
+        // best deep candidate in plausible range always gets the last chip.
+        if let best = top.first, !top.contains(where: { lexicon.isDeepTier($0.word) }),
+           let rare = results.first(where: {
+               lexicon.isDeepTier($0.word)
+               && $0.score - best.score < config.deepSlotMarginKeys * layout.keyPitch
+           }) {
+            if top.count == config.candidateCount { top.removeLast() }
+            top.append(rare)
+        }
+
+        return top
     }
 
     /// A contact that barely moved is a single key press, not a word.

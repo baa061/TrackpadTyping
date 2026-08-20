@@ -313,15 +313,15 @@ final class HUDView: NSView {
             NSColor(calibratedWhite: 0.19, alpha: 0.95).setFill()
             NSBezierPath(roundedRect: slot, xRadius: 7, yRadius: 7).fill()
 
-            var str = NSString(string: word)
-            var size = str.size(withAttributes: attrs)
-            if size.width > slot.width - 8 {          // never overflow a slot
-                str = NSString(string: word.prefix(8) + "…")
-                size = str.size(withAttributes: attrs)
-            }
-            str.draw(at: NSPoint(x: slot.midX - size.width / 2,
-                                 y: slot.midY - size.height / 2),
-                     withAttributes: attrs)
+            // Long words trail off at the bubble's edge — clipped, not
+            // ellipsized: "emergen" reads better than "emergen…" at this size.
+            let str = NSString(string: word)
+            let size = str.size(withAttributes: attrs)
+            NSGraphicsContext.current?.saveGraphicsState()
+            NSBezierPath(roundedRect: slot.insetBy(dx: 4, dy: 0), xRadius: 5, yRadius: 5).addClip()
+            let x = size.width <= slot.width - 10 ? slot.midX - size.width / 2 : slot.minX + 6
+            str.draw(at: NSPoint(x: x, y: slot.midY - size.height / 2), withAttributes: attrs)
+            NSGraphicsContext.current?.restoreGraphicsState()
         }
     }
 

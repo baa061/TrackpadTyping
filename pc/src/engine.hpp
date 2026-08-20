@@ -153,6 +153,8 @@ struct Config {
     bool endWeighting = true;
     int smoothingPasses = 2;
     double midFallbackPenaltyKeys = 0.4;   // real corpus words beyond core
+    double deepTierMarginKeys = 0.35;
+    double deepSlotMarginKeys = 2.5;
     double endpointAnchorWeight = 0.3;     // raw first/last point distances
     double pauseMinMS = 180, pauseMaxMS = 1200;
     double loopMinTurn = 5.0;
@@ -190,7 +192,7 @@ public:
             if (!w.empty() && w.back() == '\r') w.pop_back();   // windows line endings
             if (w.empty() || indexOf.count(w)) continue;
             bool core = rank < 3000 || (rank < 9000 && dictionary.count(w)) || curatedSet.count(w);
-            add(w, rank, core, !core);
+            add(w, rank, core, !core && rank < 50000);
             rank += 1;
         }
         // Contractions: subtitle tokenizers split them apart, so none survive
@@ -343,6 +345,7 @@ private:
         auto it = indexOf.find(w);
         auto le = learned.find(w);
         if (it == indexOf.end() || le == learned.end()) return;
+        if (!isCore[it->second]) isMidTier[it->second] = true;   // one use lifts deep tier
         double boost = std::log(1.0 + le->second.count) * 1.2;
         if (le->second.sessions >= 2 && le->second.count >= 3) isCore[it->second] = true;
         logPrior[it->second] = std::min(0.0, basePrior[it->second] + boost);
@@ -437,8 +440,41 @@ public:
         }
         std::sort(results.begin(), results.end(),
                   [](const Candidate& a, const Candidate& b) { return a.score < b.score; });
-        if ((int)results.size() > config.candidateCount) results.resize(config.candidateCount);
-        return results;
+
+        auto isDeep = [&](const std::string& w) {
+            auto it2 = std::find(lexicon.words.begin(), lexicon.words.end(), w);
+            if (it2 == lexicon.words.end()) return false;
+            size_t idx2 = it2 - lexicon.words.begin();
+            return !lexicon.isCore[idx2] && !lexicon.isMidTier[idx2];
+        };
+        // near-tie protection: rare words only outrank common ones decisively
+        if (!results.empty() && isDeep(results[0].word)) {
+            double margin = config.deepTierMarginKeys * layout.keyPitch;
+            for (size_t k = 1; k < results.size(); k++)
+                if (!isDeep(results[k].word)) {
+                    if (results[k].score - results[0].score < margin) {
+                        auto shallow = results[k];
+                        results.erase(results.begin() + k);
+                        results.insert(results.begin(), shallow);
+                    }
+                    break;
+                }
+        }
+        std::vector<Candidate> top(results.begin(),
+            results.begin() + std::min((size_t)config.candidateCount, results.size()));
+        // reserved rare-word slot
+        bool hasDeep = false;
+        for (auto& c : top) if (isDeep(c.word)) { hasDeep = true; break; }
+        if (!top.empty() && !hasDeep) {
+            for (auto& c : results)
+                if (isDeep(c.word) &&
+                    c.score - top[0].score < config.deepSlotMarginKeys * layout.keyPitch) {
+                    if ((int)top.size() == config.candidateCount) top.pop_back();
+                    top.push_back(c);
+                    break;
+                }
+        }
+        return top;
     }
 
     char decodeTap(const Pt& p) const { return layout.nearestLetter(p); }

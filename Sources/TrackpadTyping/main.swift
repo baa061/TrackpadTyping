@@ -31,7 +31,7 @@ if let i = args.firstIndex(of: "--probe"), i + 1 < args.count {
             guard let path = SelfTest.synthesize(word: word, layout: layout,
                                                  noiseKeys: 0.30, sloppy: trial == 2, rng: &rng) else { continue }
             let cands = decoder.decode(path: path)
-            let list = cands.prefix(5).map { String(format: "%@ %.0f", $0.word, $0.score) }.joined(separator: "  ")
+            let list = cands.prefix(8).map { String(format: "%@ %.0f", $0.word, $0.score) }.joined(separator: "  ")
             print("  trial \(trial)\(trial == 2 ? " (sloppy)" : ""): \(list)")
         }
     }

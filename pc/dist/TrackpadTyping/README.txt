@@ -34,5 +34,9 @@ Double-tap space = period. Shift key or auto-capitals after . ? !
 Top bar shows what you typed — pick a word there, then trace, to replace it.
 Words you spell out by hand are learned automatically.
 
+UPGRADING from an older version: just delete the old folder and use this
+one — that's everything. Your learned words and dwell settings live in
+%APPDATA%\TrackpadTyping and carry over automatically.
+
 Ctrl+Alt+Space hides the keyboard. Right-click the tray icon to quit.
 No install needed. Nothing leaves your computer.
