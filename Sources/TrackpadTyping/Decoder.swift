@@ -350,7 +350,8 @@ enum EmphasisDetector {
                 marks.append(Mark(letter: ch, t: w.t, fromLoop: true))
             }
         }
-        for k in 2..<(path.count - 2) where dwell[k] * 1000 >= config.pauseMinMS {
+        for k in 2..<(path.count - 2)
+            where dwell[k] * 1000 >= config.pauseMinMS && dwell[k] * 1000 <= config.pauseMaxMS {
             if let ch = layout.nearestLetter(to: path[k]),
                layout.center(of: ch).map({ $0.distance(to: path[k]) <= bindRadius }) == true {
                 marks.append(Mark(letter: ch, t: arc[k] / totalArc, fromLoop: false))

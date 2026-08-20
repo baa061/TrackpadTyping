@@ -123,9 +123,20 @@ struct Config: Codable {
     var hoverMode: Bool = false
     /// Stillness that starts a word while traveling (ms).
     var hoverStartDwellMS: Double = 450
-    /// Stillness that commits the word while tracing (ms). Must exceed
-    /// pauseMinMS comfortably, so mid-word emphasis pauses stay distinct.
+    /// Legacy (v1 hover): stillness-commit threshold. No longer commits —
+    /// kept so existing config files decode.
     var hoverCommitDwellMS: Double = 650
+    /// Dwell that activates a non-letter control (chips, bank, space,
+    /// punctuation, ⌫) in hover mode.
+    var dwellActivateMS: Double = 650
+    /// Total dwell on one key that types it as a single letter.
+    var hoverLetterDwellMS: Double = 1100
+    /// How far above the letter grid the cursor must go to commit a trace —
+    /// a buffer so top-row overshoot doesn't commit accidentally.
+    var commitExitBufferPt: Double = 12
+    /// Pauses longer than this are rests, not letter emphasis: a joystick
+    /// user stopping to think must not tag the letter they happen to be on.
+    var pauseMaxMS: Double = 1200
     /// Keep the pointer confined to the keyboard panel while glide mode is on.
     /// Without this the cursor drifts off the panel word by word until every
     /// trace decodes as garbage from a screen corner.

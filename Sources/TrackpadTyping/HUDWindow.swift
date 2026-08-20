@@ -17,6 +17,11 @@ final class HUDView: NSView {
     var bankWords: [String] = []
     /// Click-free (dwell) input mode indicator + toggle.
     var hoverModeOn = false
+    /// True while a hover-mode trace is being recorded — tints the grid.
+    var hoverTracingActive = false
+    /// Dwell feedback ring: view-space point and fill fraction (0 hides it).
+    var dwellPoint: NSPoint? = nil
+    var dwellProgress: Double = 0
     static let hoverToggleWidth: CGFloat = 58
 
     var hoverToggleRect: NSRect {
@@ -129,6 +134,13 @@ final class HUDView: NSView {
         drawGrabber()
         drawTypedBar()
         drawCandidateStrip()
+        if hoverTracingActive {
+            let r = padRect.insetBy(dx: -3, dy: -3)
+            NSColor(calibratedRed: 0.3, green: 0.6, blue: 1.0, alpha: 0.5).setStroke()
+            let b = NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8)
+            b.lineWidth = 2.5
+            b.stroke()
+        }
         drawKeys()
         drawDeleteKey(active: deleteActive)
         drawSpaceBar()
@@ -136,6 +148,7 @@ final class HUDView: NSView {
         drawHoverToggle()
         drawBank()
         drawTrace()
+        drawDwellRing()
     }
 
     private func drawGrabber() {
@@ -432,6 +445,22 @@ final class HUDView: NSView {
         }
     }
 
+    private func drawDwellRing() {
+        guard dwellProgress > 0.03, let c = dwellPoint else { return }
+        let r: CGFloat = 14
+        let bg = NSBezierPath(ovalIn: NSRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
+        NSColor(calibratedWhite: 0.2, alpha: 0.55).setStroke()
+        bg.lineWidth = 4
+        bg.stroke()
+        let arc = NSBezierPath()
+        arc.appendArc(withCenter: c, radius: r, startAngle: 90,
+                      endAngle: 90 - CGFloat(dwellProgress) * 360, clockwise: true)
+        NSColor(calibratedRed: 0.35, green: 0.8, blue: 0.5, alpha: 0.95).setStroke()
+        arc.lineWidth = 4
+        arc.lineCapStyle = .round
+        arc.stroke()
+    }
+
     private func drawTrace() {
         guard livePath.count > 1 else { return }
         let path = NSBezierPath()
@@ -555,6 +584,9 @@ final class HUDWindow: NSPanel {
     private func viewPoint(_ p: NSPoint) -> NSPoint {
         NSPoint(x: p.x - frame.minX, y: p.y - frame.minY)
     }
+
+    /// Screen point -> view coordinates, for callers positioning overlays.
+    func viewPointPublic(_ p: NSPoint) -> NSPoint { viewPoint(p) }
 
     /// The key area in screen coordinates (origin bottom-left, y up) — the same
     /// space `NSEvent.mouseLocation` reports in.

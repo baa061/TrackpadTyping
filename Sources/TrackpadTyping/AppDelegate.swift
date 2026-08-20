@@ -40,6 +40,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hoverDwell: [Double] = []
     private var hoverLastPos: Pt? = nil
     private var hoverStillTime = 0.0
+    /// Identity of the control currently accumulating dwell, and whether it
+    /// has already fired (refractory: it must be exited before re-firing).
+    private var dwellTargetToken: String? = nil
+    private var dwellTargetTime = 0.0
+    private var dwellTargetFired = false
+    /// The engine is inert until the pointer makes its first *real* move:
+    /// mode activation warps the cursor onto the grid, and the warp itself
+    /// looks like motion, so ticks are ignored for a grace period first —
+    /// otherwise the parked cursor self-arms and types a stray letter.
+    private var dwellEngineLive = false
+    private var dwellEngineStart = Date.distantPast
+    /// Time still dwelling on the arming key since tracing was armed — the
+    /// single-letter path.
+    private var armStillTotal = 0.0
 
     /// Hold-to-delete state: when the ⌫ key was pressed and how many repeats
     /// have fired, which together drive the escalation schedule.
@@ -585,21 +599,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             chipPressed = nil
-            if hud.isInHoverToggle(screenPoint: mouseUp) {
-                setHoverMode(!config.hoverMode)
-                return
+            if activateControl(at: mouseUp) { return }
+            if let p = path.last, hud.isInKeyArea(screenPoint: mouseUp),
+                      let ch = decoder.decodeTap(at: p) {
+                tapLetter(ch)
             }
-            if hud.isInSpaceBar(screenPoint: mouseUp) {
-                spaceBarTapped()
-            } else if let punct = hud.punctuationIndex(screenPoint: mouseUp) {
-                punctuationTapped(punct)
-            } else if let range = hud.typedWordRange(screenPoint: mouseUp) {
-                toggleReplaceTarget(range)
-            } else if let idx = hud.candidateIndex(screenPoint: mouseUp),
-               lastCommit != nil {
-                selectCandidate(idx)
-            } else if let slot = hud.bankIndex(screenPoint: NSEvent.mouseLocation),
-               slot < hud.hudView.bankWords.count {
+        } else {
+            let (cleaned, emphases) = EmphasisDetector.detect(
+                path: path, dwell: dwell, layout: layout, config: config)
+            commitGlide(path: cleaned, emphases: emphases)
+        }
+    }
+
+    /// The shared control dispatch: everything on the panel that is not a
+    /// letter key. Used by click-taps and, in hover mode, by dwell fires.
+    @discardableResult
+    private func activateControl(at point: NSPoint) -> Bool {
+        if hud.isInHoverToggle(screenPoint: point) {
+            setHoverMode(!config.hoverMode)
+            return true
+        }
+        if hud.isInSpaceBar(screenPoint: point) {
+            spaceBarTapped()
+            return true
+        }
+        if let punct = hud.punctuationIndex(screenPoint: point) {
+            punctuationTapped(punct)
+            return true
+        }
+        if let range = hud.typedWordRange(screenPoint: point) {
+            toggleReplaceTarget(range)
+            return true
+        }
+        if let idx = hud.candidateIndex(screenPoint: point), lastCommit != nil {
+            selectCandidate(idx)
+            return true
+        }
+        if hud.isInDeleteKey(screenPoint: point) {
+            // dwell path only — click path handles ⌫ in beginTrace
+            backspaceViaDwell()
+            return true
+        }
+        if let slot = hud.bankIndex(screenPoint: point),
+           slot < hud.hudView.bankWords.count {
                 let word = applyCase(hud.hudView.bankWords[slot])
                 letterRun = ""
                 if let target = replaceRange {
@@ -612,24 +654,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 lastCommit = nil
                 updateHUD(candidates: [], status: word)
                 refreshBank()
-            } else if let p = path.last, hud.isInKeyArea(screenPoint: mouseUp),
-                      let ch = decoder.decodeTap(at: p) {
-                if let target = replaceRange {
-                    let text = applyCase(String(ch))
-                    _ = performReplace(target: target, with: text)
-                    lastCommit = nil
-                    updateHUD(candidates: [], status: text)
-                } else {
-                    if letterRun.isEmpty { letterRunCapitalized = shiftPending }
-                    inject(applyCase(String(ch)))
-                    letterRun.append(ch)
-                    offerCompletions()
-                }
-            }
+                return true
+        }
+        return false
+    }
+
+    /// A tapped or dwelled letter key.
+    private func tapLetter(_ ch: Character) {
+        if let target = replaceRange {
+            let text = applyCase(String(ch))
+            _ = performReplace(target: target, with: text)
+            lastCommit = nil
+            updateHUD(candidates: [], status: text)
         } else {
-            let (cleaned, emphases) = EmphasisDetector.detect(
-                path: path, dwell: dwell, layout: layout, config: config)
-            commitGlide(path: cleaned, emphases: emphases)
+            if letterRun.isEmpty { letterRunCapitalized = shiftPending }
+            inject(applyCase(String(ch)))
+            letterRun.append(ch)
+            offerCompletions()
+        }
+    }
+
+    /// Backspace fired by dwell: whole-word right after a glide, else one
+    /// character — mirroring the click behaviour without the hold machinery.
+    private func backspaceViaDwell() {
+        let midRun = !letterRun.isEmpty
+        letterRun = ""
+        pendingReinforce = nil
+        setCandidates(active: false)
+        if let commit = lastCommit, !midRun {
+            erase(commit.insertedLength + commit.tail.count)
+            if !commit.tail.isEmpty { inject(commit.tail) }
+            lastCommit = nil
+            updateHUD(candidates: [], status: "⌫ word")
+        } else {
+            lastCommit = nil
+            erase(1)
+            updateHUD(candidates: [], status: "⌫")
         }
     }
 
@@ -650,6 +710,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hoverDwell = []
         hoverLastPos = nil
         hoverStillTime = 0
+        dwellTargetToken = nil
+        dwellTargetTime = 0
+        dwellTargetFired = false
+        dwellEngineLive = false
+        dwellEngineStart = Date()
         dwellTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
             self?.hoverTick()
         }
@@ -670,68 +735,191 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the dwell machine stands down for its duration.
         guard !tracing, deleteHeldSince == nil, dragOffset == nil else {
             hoverStillTime = 0
+            clearDwellFeedback()
             return
         }
 
         let dt = 1.0 / 120.0
-        let p = hud.toLayout(screenPoint: NSEvent.mouseLocation)
+        let screen = NSEvent.mouseLocation
+        let p = hud.toLayout(screenPoint: screen)
         let moved = hoverLastPos.map { $0.distance(to: p) > 0.5 } ?? true
         hoverStillTime = moved ? 0 : hoverStillTime + dt
         hoverLastPos = p
 
-        if !hoverTracing {
-            // TRAVELING: nothing is recorded — this is the erasure of the
-            // between-words swipe. Stillness over the letter grid arms a word.
-            if hoverStillTime * 1000 >= config.hoverStartDwellMS,
-               hud.isInKeyArea(screenPoint: NSEvent.mouseLocation) {
+        if !dwellEngineLive {
+            // Grace: let the activation warp settle, then demand a real move.
+            guard Date().timeIntervalSince(dwellEngineStart) > 0.35 else {
+                hoverLastPos = p
+                return
+            }
+            if moved { dwellEngineLive = true } else { return }
+        }
+
+        if hoverTracing {
+            tracingTick(p: p, screen: screen, moved: moved, dt: dt)
+        } else {
+            travelingTick(p: p, screen: screen, moved: moved, dt: dt)
+        }
+    }
+
+    /// TRAVELING: movement is ignored; dwell arms letters or fires controls.
+    private func travelingTick(p: Pt, screen: NSPoint, moved: Bool, dt: Double) {
+        let token = dwellToken(at: screen)
+
+        if moved || token != dwellTargetToken {
+            dwellTargetToken = token
+            dwellTargetTime = 0
+            dwellTargetFired = false
+            clearDwellFeedback()
+            return
+        }
+        guard let token else { clearDwellFeedback(); return }
+
+        dwellTargetTime += dt
+        let ms = dwellTargetTime * 1000
+
+        if token == "key" {
+            // Letters arm a trace rather than firing like a control.
+            showDwellProgress(at: screen, fraction: ms / config.hoverStartDwellMS)
+            if ms >= config.hoverStartDwellMS {
                 hoverTracing = true
                 hoverPath = [p]
                 hoverDwell = [0]
+                armStillTotal = dwellTargetTime
                 hoverStillTime = 0
+                dwellTargetToken = nil
+                dwellTargetTime = 0
                 setCandidates(active: false)
                 flushReinforcement()
-                updateHUD(candidates: [], status: "tracing — pause to finish")
+                hud.hudView.hoverTracingActive = true
+                clearDwellFeedback()
+                updateHUD(candidates: [], status: "tracing — sweep, exit upward to type")
             }
             return
         }
 
-        // TRACING: same recording as a click-held trace, dwell included so
-        // mid-word emphasis pauses keep working.
+        // ⌫ repeats while dwelled; every other control fires once per entry.
+        if dwellTargetFired {
+            if token == "del", ms >= 500 {
+                dwellTargetTime = 0
+                backspaceViaDwell()
+            }
+            return
+        }
+
+        // Continued dwell on a chip past 2x the activate threshold = forget.
+        if token.hasPrefix("chip") || token.hasPrefix("bank") {
+            showDwellProgress(at: screen, fraction: ms / (config.dwellActivateMS * 2))
+            if ms >= config.dwellActivateMS * 2 {
+                if let word = chipWord(at: screen), lexicon.isLearned(word) {
+                    lexicon.forget(word)
+                    lastCommit = nil
+                    setCandidates(active: false)
+                    refreshBank()
+                    updateHUD(candidates: [], status: "forgot “\(word)”")
+                }
+                dwellTargetFired = true
+                clearDwellFeedback()
+            } else if ms >= config.dwellActivateMS, !dwellTargetFired {
+                // fire the pick once, but keep timing toward the forget
+                if activateControl(at: screen) { }
+                dwellTargetFired = true
+            }
+            return
+        }
+
+        showDwellProgress(at: screen, fraction: ms / config.dwellActivateMS)
+        if ms >= config.dwellActivateMS {
+            dwellTargetFired = true
+            clearDwellFeedback()
+            activateControl(at: screen)
+        }
+    }
+
+    /// TRACING: pauses never commit — commitment is spatial (exit upward).
+    private func tracingTick(p: Pt, screen: NSPoint, moved: Bool, dt: Double) {
         if moved {
+            armStillTotal = -1        // swept: the single-letter path is off
             hoverPath.append(p)
             hoverDwell.append(0)
             hud.hudView.livePath = hoverPath
             hud.refresh()
-        } else if !hoverDwell.isEmpty {
-            hoverDwell[hoverDwell.count - 1] += dt
+        } else {
+            if !hoverDwell.isEmpty { hoverDwell[hoverDwell.count - 1] += dt }
+            // Still on the arming key with no sweep yet: single-letter dwell.
+            if armStillTotal >= 0 {
+                armStillTotal += dt
+                showDwellProgress(at: screen,
+                                  fraction: armStillTotal * 1000 / config.hoverLetterDwellMS)
+                if armStillTotal * 1000 >= config.hoverLetterDwellMS {
+                    finishHoverTrace()
+                    if let ch = decoder.decodeTap(at: p) { tapLetter(ch) }
+                    return
+                }
+            }
         }
 
-        if hoverStillTime * 1000 >= config.hoverCommitDwellMS {
-            hoverTracing = false
+        // Spatial commit: the cursor left the letter grid upward.
+        let ka = hud.keyAreaOnScreen
+        if screen.y > ka.maxY + CGFloat(config.commitExitBufferPt) {
             let path = hoverPath
             let dwell = hoverDwell
-            hoverPath = []
-            hoverDwell = []
-            hoverStillTime = 0
-            hud.hudView.livePath = []
-
-            if Geometry.pathLength(path) < config.tapMaxTravelKeys * layout.keyPitch {
-                // A start-dwell followed by continued stillness: one letter.
-                if let last = path.last, let ch = decoder.decodeTap(at: last) {
-                    if letterRun.isEmpty { letterRunCapitalized = shiftPending }
-                    inject(applyCase(String(ch)))
-                    letterRun.append(ch)
-                    offerCompletions()
-                }
-            } else {
-                let (cleaned, emphases) = EmphasisDetector.detect(
-                    path: path, dwell: dwell, layout: layout, config: config)
-                commitGlide(path: cleaned, emphases: emphases)
+            finishHoverTrace()
+            guard Geometry.pathLength(path) >= config.tapMaxTravelKeys * layout.keyPitch else {
+                updateHUD(candidates: [], status: "")
+                return
             }
+            let (cleaned, emphases) = EmphasisDetector.detect(
+                path: path, dwell: dwell, layout: layout, config: config)
+            commitGlide(path: cleaned, emphases: emphases)
+        }
+    }
+
+    private func finishHoverTrace() {
+        hoverTracing = false
+        hoverPath = []
+        hoverDwell = []
+        armStillTotal = -1
+        hoverStillTime = 0
+        hud.hudView.hoverTracingActive = false
+        hud.hudView.livePath = []
+        clearDwellFeedback()
+        hud.refresh()
+    }
+
+    /// What the cursor is over, as a stable identity for refractory tracking.
+    /// The hover toggle is deliberately absent: a resting cursor must never be
+    /// able to dwell the user out of their own input mode — leaving hover mode
+    /// takes a click or the hotkey.
+    private func dwellToken(at screen: NSPoint) -> String? {
+        if hud.isInHoverToggle(screenPoint: screen) { return nil }
+        if hud.isInSpaceBar(screenPoint: screen) { return "space" }
+        if let i = hud.punctuationIndex(screenPoint: screen) { return "punct\(i)" }
+        if let r = hud.typedWordRange(screenPoint: screen) { return "typed\(r.lowerBound)" }
+        if let i = hud.candidateIndex(screenPoint: screen), lastCommit != nil { return "chip\(i)" }
+        if hud.isInDeleteKey(screenPoint: screen) { return "del" }
+        if let i = hud.bankIndex(screenPoint: screen),
+           i < hud.hudView.bankWords.count { return "bank\(i)" }
+        if hud.isInKeyArea(screenPoint: screen) { return "key" }
+        return nil
+    }
+
+    private func showDwellProgress(at screen: NSPoint, fraction: Double) {
+        hud.hudView.dwellPoint = hud.viewPointPublic(screen)
+        hud.hudView.dwellProgress = min(max(fraction, 0), 1)
+        hud.refresh()
+    }
+
+    private func clearDwellFeedback() {
+        if hud.hudView.dwellProgress != 0 {
+            hud.hudView.dwellProgress = 0
+            hud.hudView.dwellPoint = nil
+            hud.refresh()
         }
     }
 
     // MARK: - Multi-finger gestures
+
 
     private func handle(_ event: GestureRecognizer.Event) {
         // The four-finger tap has to work in both states: it is what turns the
@@ -1166,6 +1354,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let dict: [String: Any] = [
             "glideMode": glideMode,
+            "hoverMode": config.hoverMode,
+            "hoverTracing": hoverTracing,
             "panel": [Double(f.minX), Double(f.minY), Double(f.width), Double(f.height)],
             "typed": typed,
             "replaceRange": replaceRange.map { [$0.lowerBound, $0.upperBound] } as Any,
@@ -1175,6 +1365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "typedWords": hud.hudView.typedWordRects.map { ["rect": screen($0.0),
                                                             "range": [$0.1.lowerBound, $0.1.upperBound]] },
             "spaceBar": screen(hud.hudView.spaceBarRect),
+            "hoverToggle": screen(hud.hudView.hoverToggleRect),
             "deleteKey": screen(hud.hudView.deleteKeyRect),
             "keys": keys,
         ]
