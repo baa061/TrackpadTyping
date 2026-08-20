@@ -68,12 +68,16 @@ struct KeyboardLayout {
     /// The ideal traced path for a word: a polyline through its key centres.
     /// Consecutive repeats collapse — a glide across "ll" is physically
     /// indistinguishable from one across a single "l", so the template must not
-    /// claim otherwise.
+    /// claim otherwise. Apostrophes (and any other non-key character) are
+    /// skipped: "weren't" glides as w-e-r-e-n-t but types with its apostrophe.
     func template(for word: String) -> [Pt]? {
         var pts: [Pt] = []
         var last: Character? = nil
         for ch in word {
-            guard let c = center(of: ch) else { return nil }   // non-letter: not glideable
+            guard let c = center(of: ch) else {
+                if ch == "'" { continue }          // silent in the glide
+                return nil                          // anything else: not glideable
+            }
             if ch != last { pts.append(c) }
             last = ch
         }

@@ -65,6 +65,11 @@ struct Config: Codable {
     var emphasisMissPenaltyKeys: Double = 1.5
     /// Tolerance on the emphasized letter's position along the word (0..1).
     var emphasisPositionTolerance: Double = 0.30
+    /// Weight on the raw first-point and last-point distances between trace
+    /// and template. Elastic matching softens endpoint mismatches (that is
+    /// its job mid-path), but where a trace starts and stops is deliberate —
+    /// this term re-anchors it, separating e.g. "trash" from "trashy".
+    var endpointAnchorWeight: Double = 0.3
     /// Template/path arc-length ratio bounds for a word to stay in the running.
     var lengthRatioMin: Double = 0.35
     var lengthRatioMax: Double = 2.80
@@ -90,6 +95,10 @@ struct Config: Codable {
     var useSystemDictionary: Bool = true
     /// Nominal rank for fallback-tier words (sets their relative prior).
     var fallbackRank: Double = 60_000
+    /// Reduced penalty for real corpus words beyond the core cutoff — rare
+    /// but legitimate vocabulary ("trashy", "wahoo"), as opposed to the
+    /// archaic dictionary tail.
+    var midFallbackPenaltyKeys: Double = 0.4
     /// Flat extra penalty, in key pitches, for words outside the
     /// frequency-ranked core. Synthetic accuracy is flat from 0.8 to 2.2, but
     /// real traces are messier than synthetic ones and pull archaic dictionary

@@ -203,15 +203,18 @@ extension SelfTest {
             return (100.0 * Double(t1) / Double(cs.count), 100.0 * Double(t3) / Double(cs.count))
         }
 
-        for legacy in [false, true] {
-            Lexicon.resourceDisabled = legacy
-            let lexicon = Lexicon(config: baseConfig)
-            let dec = Decoder(layout: layout, lexicon: lexicon, config: baseConfig)
-            let c = score(dec, clean), sl = score(dec, sloppyC)
-            print(String(format: "%@ lexicon (%d words):  clean %.1f/%.1f   sloppy %.1f/%.1f",
-                         legacy ? "LEGACY" : "CORPUS", lexicon.count, c.0, c.1, sl.0, sl.1))
+        for anchor in [0.0, 0.3, 0.6] {
+            for mid in [0.4, 0.7] {
+                var cfg = baseConfig
+                cfg.endpointAnchorWeight = anchor
+                cfg.midFallbackPenaltyKeys = mid
+                let lexicon = Lexicon(config: cfg)
+                let dec = Decoder(layout: layout, lexicon: lexicon, config: cfg)
+                let c = score(dec, clean), sl = score(dec, sloppyC)
+                print(String(format: "anchor %.1f mid %.1f:  clean %.1f/%.1f   sloppy %.1f/%.1f",
+                             anchor, mid, c.0, c.1, sl.0, sl.1))
+            }
         }
-        Lexicon.resourceDisabled = false
     }
 
     static func sweep(baseConfig: Config, sampleSize: Int = 400) {

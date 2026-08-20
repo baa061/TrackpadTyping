@@ -45,6 +45,7 @@ final class Decoder {
     /// stays a pure sum of comparable quantities.
     private let priorScale: Double
     private let fallbackPenalty: Double
+    private let midPenalty: Double
 
     init(layout: KeyboardLayout, lexicon: Lexicon, config: Config) {
         self.layout = layout
@@ -53,6 +54,7 @@ final class Decoder {
         self.shapeNormSize = layout.keyPitch * 4.0
         self.priorScale = config.priorWeightKeys * layout.keyPitch
         self.fallbackPenalty = config.fallbackPenaltyKeys * layout.keyPitch
+        self.midPenalty = config.midFallbackPenaltyKeys * layout.keyPitch
     }
 
     // MARK: - Templates
@@ -78,6 +80,7 @@ final class Decoder {
         var last: Character? = nil
         var vertex = 0
         for ch in lexicon.words[idx] {
+            if layout.center(of: ch) == nil { continue }   // apostrophes are silent
             if ch != last {
                 if vertex > 0 { acc += poly[vertex].distance(to: poly[vertex - 1]) }
                 positions.append((ch, total > 1e-9 ? acc / total : 0))
@@ -215,7 +218,14 @@ final class Decoder {
             let shape = weightedPointDistance(userShape, tShape)
             let location = weightedPointDistance(userLoc, tLoc)
             var priorPenalty = -lexicon.logPrior[idx] * priorScale
-                             + (lexicon.isCore[idx] ? 0 : fallbackPenalty)
+            if !lexicon.isCore[idx] {
+                priorPenalty += lexicon.isMidTier[idx] ? midPenalty : fallbackPenalty
+            }
+            // Endpoint anchor: DTW may not warp away where the finger began
+            // and where it stopped.
+            priorPenalty += config.endpointAnchorWeight
+                          * (userLoc[0].distance(to: tLoc[0])
+                             + userLoc[userLoc.count - 1].distance(to: tLoc[tLoc.count - 1]))
             if !emphases.isEmpty, let letters = letterPositions[idx] {
                 for e in emphases {
                     let matched = letters.contains {

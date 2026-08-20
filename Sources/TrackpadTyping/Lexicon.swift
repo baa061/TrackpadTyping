@@ -14,6 +14,10 @@ final class Lexicon {
     /// coverage net, not a peer: it is scored with a flat extra penalty so an
     /// archaic word cannot win on shape against a word people actually use.
     private(set) var isCore: [Bool] = []
+    /// Corpus words admitted past the core cutoff: real vocabulary with real
+    /// frequencies, unlike the archaic dictionary tail — they pay a reduced
+    /// penalty rather than the full junk rate.
+    private(set) var isMidTier: [Bool] = []
 
     /// words[] indices bucketed by (first letter, last letter). Endpoint
     /// pruning is what makes the search cheap: a glide's start and end are its
@@ -66,7 +70,7 @@ final class Lexicon {
         return Int(f - 97) * 26 + Int(l - 97)
     }
 
-    private func add(_ word: String, rank: Double, core: Bool) {
+    private func add(_ word: String, rank: Double, core: Bool, midTier: Bool = false) {
         guard indexOfWord[word] == nil, let key = Self.bucketKey(word) else { return }
         let idx = words.count
         let prior = -Foundation.log(rank + 1.0)
@@ -78,6 +82,7 @@ final class Lexicon {
         basePrior.append(prior)
         baseCore.append(core)
         isCore.append(core)
+        isMidTier.append(midTier)
         buckets[key].append(idx)
         indexOfWord[word] = idx
     }
@@ -111,9 +116,16 @@ final class Lexicon {
                 let core = rank < 3_000
                         || (rank < 9_000 && dictionary.contains(w))
                         || curated.contains(w)
-                add(w, rank: rank, core: core)
+                add(w, rank: rank, core: core, midTier: !core)
                 rank += 1
             }
+        }
+
+        // Contractions: the corpus tokenizer split them ("weren" + "t"), so
+        // none survived cleaning. They are among the most common words in
+        // conversational English; glide templates skip their apostrophes.
+        for (w, r) in Self.contractions where indexOfWord[w] == nil {
+            add(w, rank: r, core: true)
         }
 
         // The embedded list backstops a missing resource, and tops up any
@@ -124,6 +136,20 @@ final class Lexicon {
             rank += 1
         }
     }
+
+    static let contractions: [(String, Double)] = [
+        ("i'm", 40), ("it's", 45), ("don't", 55), ("that's", 80), ("you're", 90),
+        ("can't", 110), ("i'll", 120), ("i've", 140), ("he's", 150), ("she's", 160),
+        ("we're", 170), ("what's", 180), ("didn't", 190), ("there's", 210),
+        ("let's", 230), ("i'd", 250), ("they're", 270), ("doesn't", 290),
+        ("isn't", 320), ("won't", 340), ("you'll", 360), ("we'll", 380),
+        ("wasn't", 400), ("you've", 420), ("he'll", 480), ("wouldn't", 500),
+        ("couldn't", 520), ("aren't", 560), ("we've", 580), ("haven't", 600),
+        ("shouldn't", 650), ("weren't", 670), ("hasn't", 720), ("they'll", 760),
+        ("you'd", 800), ("they've", 840), ("she'll", 880), ("hadn't", 920),
+        ("who's", 960), ("ain't", 1000), ("that'll", 1200), ("would've", 1300),
+        ("could've", 1400), ("should've", 1500), ("here's", 1100), ("it'll", 1150),
+    ]
 
     private static func systemDictionaryWords() -> Set<String> {
         guard let text = try? String(contentsOfFile: "/usr/share/dict/words", encoding: .utf8)
