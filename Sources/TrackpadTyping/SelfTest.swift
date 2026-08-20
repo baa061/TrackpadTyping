@@ -155,71 +155,63 @@ extension SelfTest {
     /// The lexicon and the synthetic traces are built once and shared: they do
     /// not depend on the weights, and holding them fixed means every cell of
     /// the grid is scored against identical input.
-    /// Ablation: which of the forgiveness changes actually costs clean
-    /// accuracy? Toggles each independently against both populations.
-    static func ablate(baseConfig: Config, sampleSize: Int = 400) {
+    /// The decisive lexicon comparison: words sampled in proportion to their
+    /// real frequency from the modern corpus, decoded by both the corpus
+    /// lexicon and the legacy one. A missing word decodes wrong — which is
+    /// exactly what it does to the user.
+    static func ablate(baseConfig: Config, sampleSize: Int = 500) {
         let layout = KeyboardLayout(keyPitch: baseConfig.screenKeyPitch,
                                     rowPitchRatio: baseConfig.rowPitchRatio)
-        let lexicon = Lexicon(config: baseConfig)
-        var seen = Set<String>()
-        let words = CommonWords.ordered.filter { $0.count >= 2 && seen.insert($0).inserted }
-                                       .prefix(sampleSize)
-        func makeCases(noise: Double, sloppy: Bool, seed: UInt64) -> [(String, [Pt])] {
-            var rng = SeededRNG(seed: seed)
+
+        guard let url = Bundle.module.url(forResource: "lexicon-en", withExtension: "txt"),
+              let text = try? String(contentsOf: url, encoding: .utf8) else {
+            print("no corpus resource"); return
+        }
+        let corpus = text.split(separator: "\n").prefix(5000).map(String.init)
+            .filter { $0.count >= 2 }
+
+        // Zipf-weighted sampling: rank r drawn with probability ~ 1/(r+10).
+        var rng = SeededRNG(seed: 21)
+        let weights = corpus.indices.map { 1.0 / Double($0 + 10) }
+        let totalW = weights.reduce(0, +)
+        var words: [String] = []
+        for _ in 0..<sampleSize {
+            var t = Double.random(in: 0..<totalW, using: &rng)
+            for (i, w) in weights.enumerated() {
+                t -= w
+                if t <= 0 { words.append(corpus[i]); break }
+            }
+        }
+
+        func cases(sloppy: Bool, seed: UInt64) -> [(String, [Pt])] {
+            var r = SeededRNG(seed: seed)
             return words.compactMap { w in
-                synthesize(word: w, layout: layout, noiseKeys: noise, sloppy: sloppy, rng: &rng)
+                synthesize(word: w, layout: layout, noiseKeys: 0.30, sloppy: sloppy, rng: &r)
                     .map { (w, $0) }
             }
         }
-        let clean = makeCases(noise: 0.20, sloppy: false, seed: 7)
-                  + makeCases(noise: 0.30, sloppy: false, seed: 8)
-        let sloppyC = makeCases(noise: 0.30, sloppy: true, seed: 9)
-                    + makeCases(noise: 0.45, sloppy: true, seed: 10)
-        func score(_ dec: Decoder, _ cases: [(String, [Pt])]) -> (Double, Double) {
+        let clean = cases(sloppy: false, seed: 31)
+        let sloppyC = cases(sloppy: true, seed: 32)
+
+        func score(_ dec: Decoder, _ cs: [(String, [Pt])]) -> (Double, Double) {
             var t1 = 0, t3 = 0
-            for (want, path) in cases {
+            for (want, path) in cs {
                 let names = dec.decode(path: path).map { $0.word }
                 if names.first == want { t1 += 1 }
                 if names.prefix(3).contains(want) { t3 += 1 }
             }
-            return (100.0 * Double(t1) / Double(cases.count),
-                    100.0 * Double(t3) / Double(cases.count))
+            return (100.0 * Double(t1) / Double(cs.count), 100.0 * Double(t3) / Double(cs.count))
         }
 
-        struct Cell { let name: String; let mut: (inout Config) -> Void }
-        var cells: [Cell] = [
-            Cell(name: "OLD decoder (r1.35 rigid uniform)") {
-                $0.endpointRadiusKeys = 1.35; $0.dtwBlend = 0
-                $0.endWeighting = false; $0.smoothingPasses = 0
-            },
-            Cell(name: "OLD + big rescore pool") {
-                $0.endpointRadiusKeys = 1.35; $0.dtwBlend = 0
-                $0.endWeighting = false; $0.smoothingPasses = 0
-                $0.rescoreCount = 400
-            },
-            Cell(name: "chosen + big rescore pool") { $0.rescoreCount = 400 },
-        ]
-        for blend in [0.5, 0.75, 1.0] {
-            for weights in [true, false] {
-                for smooth in [0, 2] {
-                    cells.append(Cell(name: String(format: "blend%.2f weights=%@ smooth%d",
-                                                   blend, weights ? "on " : "off", smooth)) {
-                        $0.dtwBlend = blend; $0.endWeighting = weights; $0.smoothingPasses = smooth
-                    })
-                }
-            }
-        }
-        var results = [String](repeating: "", count: cells.count)
-        DispatchQueue.concurrentPerform(iterations: cells.count) { i in
-            var cfg = baseConfig
-            cells[i].mut(&cfg)
-            let dec = Decoder(layout: layout, lexicon: lexicon, config: cfg)
+        for legacy in [false, true] {
+            Lexicon.resourceDisabled = legacy
+            let lexicon = Lexicon(config: baseConfig)
+            let dec = Decoder(layout: layout, lexicon: lexicon, config: baseConfig)
             let c = score(dec, clean), sl = score(dec, sloppyC)
-            results[i] = String(format: "  %-34s clean %.1f/%.1f   sloppy %.1f/%.1f",
-                                (cells[i].name as NSString).utf8String!,
-                                c.0, c.1, sl.0, sl.1)
+            print(String(format: "%@ lexicon (%d words):  clean %.1f/%.1f   sloppy %.1f/%.1f",
+                         legacy ? "LEGACY" : "CORPUS", lexicon.count, c.0, c.1, sl.0, sl.1))
         }
-        results.forEach { print($0) }
+        Lexicon.resourceDisabled = false
     }
 
     static func sweep(baseConfig: Config, sampleSize: Int = 400) {

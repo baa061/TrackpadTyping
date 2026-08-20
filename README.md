@@ -27,7 +27,7 @@ Move the pointer freely — nothing is decoded until you press.
 | ⌫ right after a glide | erase that whole word |
 | two-finger swipe down | delete the last word |
 | ⇧ key / two-finger swipe up | capitalize the next letter |
-| ' , . ? keys | punctuation — attaches to the word; . and ? arm an auto-capital |
+| ' , . ? ! keys | punctuation — attaches to the word; . ? ! arm an auto-capital |
 | long-press a word chip | forget a mislearned word |
 | three-finger tap | space |
 | four-finger tap | toggle glide typing |
@@ -69,12 +69,19 @@ Candidate search is pruned by the trace's endpoints (its most reliable
 features) and by arc length before any shape maths runs — mean decode time is
 ~4 ms against the full 198k-word lexicon.
 
-**Vocabulary** (`Lexicon.swift`). Three tiers: a frequency-ranked core list
-that carries the language model; `/usr/share/dict/words` as low-prior coverage
-(it is Webster's 2nd — 198k largely archaic entries that would otherwise beat
-real words on shape); and words you accept, which get promoted. A word is only
-learned after you move on without correcting it, so the lexicon never trains
-on its own mistakes.
+**Vocabulary** (`Lexicon.swift`). The language model is a modern
+frequency-ranked corpus (~47k words derived from OpenSubtitles via
+[hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords),
+CC-BY-SA, bundled as `Resources/lexicon-en.txt`). The *core* tier — words the
+decoder lets win easily — is deliberately small: the top 3,000 by frequency,
+plus corpus words up to rank 9,000 that Webster's vouches for, plus a curated
+conversational list. Everything else (rare corpus words, dialogue names,
+Webster's archaisms) stays typeable but pays a penalty. Words you accept get
+promoted through session-gated learning, hand-spelled unknown words are
+acquired outright, and a word is only learned after you move on without
+correcting it, so the lexicon never trains on its own mistakes. On
+frequency-weighted modern vocabulary this corpus model scores +24 points top-1
+over the old Webster's-based setup.
 
 **Row spacing.** Keys are 1.6× taller than wide (`rowPitchRatio`). Row
 confusion is the decoder's dominant error mode, and stretching rows measurably

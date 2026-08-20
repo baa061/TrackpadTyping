@@ -51,7 +51,7 @@ final class HUDView: NSView {
                       width: w, height: Self.spaceRowHeight - 6)
     }
 
-    static let punctuationKeys: [String] = ["⇧", "'", ",", ".", "?"]
+    static let punctuationKeys: [String] = ["⇧", "'", ",", ".", "?", "!"]
 
     func punctuationRect(_ i: Int) -> NSRect {
         let space = spaceBarRect
@@ -63,8 +63,8 @@ final class HUDView: NSView {
         case 0, 1, 2:   // ⇧ ' , share the left gap
             let w = (leftWidth - 8) / 3
             return NSRect(x: padRect.minX + CGFloat(i) * (w + 3), y: y, width: w, height: h)
-        default:        // . ? share the right gap
-            let w = (rightWidth - 7) / 2
+        default:        // . ? ! share the right gap
+            let w = (rightWidth - 10) / 3
             return NSRect(x: space.maxX + 4 + CGFloat(i - 3) * (w + 3), y: y, width: w, height: h)
         }
     }

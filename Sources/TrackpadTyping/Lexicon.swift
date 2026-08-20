@@ -38,19 +38,22 @@ final class Lexicon {
 
     /// Session unit: the calendar day (UTC epoch days).
     static func currentSession() -> Int { Int(Date().timeIntervalSince1970) / 86_400 }
+
+    /// Test hook: build the lexicon as if the bundled corpus were absent,
+    /// reproducing the pre-corpus vocabulary for A/B comparisons.
+    static var resourceDisabled = false
     private var learned: [String: LearnedWord] = [:]
 
-    /// Priors as loaded, before any learning boost — what `forget` restores.
+    /// Priors and tiers as loaded, before any learning boost — what `forget`
+    /// restores. Per-word, because the corpus load mixes tiers.
     private var basePrior: [Double] = []
-    /// Words below this index came from the frequency-ranked core list.
-    private var coreEnd = 0
+    private var baseCore: [Bool] = []
 
     private let config: Config
 
     init(config: Config) {
         self.config = config
         loadCore()
-        coreEnd = words.count
         if config.useSystemDictionary { loadSystemDictionary() }
         loadLearned()
     }
@@ -73,6 +76,7 @@ final class Lexicon {
         // now be added after load (user-taught vocabulary), and a mismatch is
         // an out-of-bounds crash in applyLearnedPrior.
         basePrior.append(prior)
+        baseCore.append(core)
         isCore.append(core)
         buckets[key].append(idx)
         indexOfWord[word] = idx
@@ -80,6 +84,40 @@ final class Lexicon {
 
     private func loadCore() {
         var rank = 0.0
+
+        // Primary vocabulary: a modern frequency-ranked word list (derived
+        // from OpenSubtitles via hermitdave/FrequencyWords, CC-BY-SA), bundled
+        // as a resource. Line order carries the frequency rank.
+        //
+        // Subtitles are dialogue, so the corpus is thick with character names
+        // ("jana", "webber", "airbender"). Admitting those as core vocabulary
+        // measurably costs accuracy — they outscore real words on shape. So a
+        // corpus word enters the core tier only if it is frequent enough that
+        // tier membership is beyond doubt, or a dictionary vouches for it;
+        // everything else stays reachable but carries the fallback penalty.
+        let dictionary = Self.systemDictionaryWords()
+        let curated = Set(CommonWords.ordered)
+
+        if !Self.resourceDisabled,
+           let url = Bundle.module.url(forResource: "lexicon-en", withExtension: "txt"),
+           let text = try? String(contentsOf: url, encoding: .utf8) {
+            for line in text.split(separator: "\n") {
+                let w = String(line)
+                guard !w.isEmpty, indexOfWord[w] == nil else { continue }
+                // Core stays deliberately small: it is the set the decoder
+                // lets win easily, and every admission dilutes accuracy on
+                // the words that dominate real typing. Beyond it, words keep
+                // their frequency-informed prior but pay the fallback penalty.
+                let core = rank < 3_000
+                        || (rank < 9_000 && dictionary.contains(w))
+                        || curated.contains(w)
+                add(w, rank: rank, core: core)
+                rank += 1
+            }
+        }
+
+        // The embedded list backstops a missing resource, and tops up any
+        // hand-curated words the corpus lacks.
         for w in CommonWords.ordered {
             guard indexOfWord[w] == nil else { continue }   // list has intentional repeats
             add(w, rank: rank, core: true)
@@ -87,13 +125,22 @@ final class Lexicon {
         }
     }
 
-    private func loadSystemDictionary() {
-        let path = "/usr/share/dict/words"
-        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return }
+    private static func systemDictionaryWords() -> Set<String> {
+        guard let text = try? String(contentsOfFile: "/usr/share/dict/words", encoding: .utf8)
+        else { return [] }
+        var out = Set<String>()
+        out.reserveCapacity(200_000)
         for line in text.split(separator: "\n") {
             let w = String(line)
             guard w.count >= 2, w.count <= 14 else { continue }
             guard w.allSatisfy({ $0.isASCII && $0.isLowercase && $0.isLetter }) else { continue }
+            out.insert(w)
+        }
+        return out
+    }
+
+    private func loadSystemDictionary() {
+        for w in Self.systemDictionaryWords().sorted() {
             add(w, rank: config.fallbackRank, core: false)
         }
     }
@@ -172,7 +219,7 @@ final class Lexicon {
         learned.removeValue(forKey: word)
         if let idx = indexOfWord[word] {
             logPrior[idx] = basePrior[idx]
-            isCore[idx] = idx < coreEnd
+            isCore[idx] = baseCore[idx]
         }
         persistLearned()
     }

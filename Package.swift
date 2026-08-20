@@ -9,6 +9,7 @@ let package = Package(
         .executableTarget(
             name: "TrackpadTyping",
             dependencies: ["MTBridge"],
+            resources: [.copy("Resources/lexicon-en.txt")],
             linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Carbon")]
         ),
     ]

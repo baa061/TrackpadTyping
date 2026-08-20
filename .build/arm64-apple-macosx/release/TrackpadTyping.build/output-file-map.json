@@ -93,5 +93,11 @@
     "swiftmodule": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main~partial.swiftmodule",
     "swift-dependencies": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swiftdeps",
     "diagnostics": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.dia"
+  },
+  "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/DerivedSources/resource_bundle_accessor.swift": {
+    "object": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/resource_bundle_accessor.swift.o",
+    "swiftmodule": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/resource_bundle_accessor~partial.swiftmodule",
+    "swift-dependencies": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/resource_bundle_accessor.swiftdeps",
+    "diagnostics": "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/resource_bundle_accessor.dia"
   }
 }

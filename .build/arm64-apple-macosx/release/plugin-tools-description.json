@@ -3,7 +3,20 @@
 
   ],
   "copyCommands" : {
-
+    "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping_TrackpadTyping.bundle/lexicon-en.txt" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/Resources/lexicon-en.txt"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping_TrackpadTyping.bundle/lexicon-en.txt"
+        }
+      ]
+    }
   },
   "explicitTargetDependencyImportCheckingMode" : {
     "none" : {
@@ -84,7 +97,15 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/DerivedSources/resource_bundle_accessor.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<TrackpadTyping-arm64-apple-macosx-release.module-resources>"
         },
         {
           "kind" : "file",
@@ -113,7 +134,8 @@
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/SelfTest.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TextInjector.swift.o",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/TrackpadMonitor.swift.o",
-        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swift.o"
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swift.o",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/resource_bundle_accessor.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -125,7 +147,7 @@
         "-O",
         "-j10",
         "-DSWIFT_PACKAGE",
-        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
         "-Xcc",
         "-fmodule-map-file=/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/MTBridge.build/module.modulemap",
         "-Xcc",
@@ -231,6 +253,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/resource_bundle_accessor.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/Modules/TrackpadTyping.swiftmodule"
         }
       ],
@@ -250,7 +276,8 @@
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/SelfTest.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift",
         "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift",
-        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift"
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift",
+        "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/DerivedSources/resource_bundle_accessor.swift"
       ],
       "tempsPath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build",
       "wholeModuleOptimization" : true
@@ -282,6 +309,7 @@
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TextInjector.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/TrackpadMonitor.swift",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift",
+      "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/DerivedSources/resource_bundle_accessor.swift",
       "-I",
       "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/Modules",
       "-target",
@@ -293,7 +321,7 @@
       "-O",
       "-j10",
       "-DSWIFT_PACKAGE",
-      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
       "-Xcc",
       "-fmodule-map-file=/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/MTBridge.build/module.modulemap",
       "-Xcc",
@@ -424,6 +452,10 @@
         {
           "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/Sources/TrackpadTyping/main.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/DerivedSources/resource_bundle_accessor.swift"
         }
       ],
       "outputFilePath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/sources"
@@ -498,6 +530,10 @@
         {
           "kind" : "file",
           "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/main.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.build/resource_bundle_accessor.swift.o"
         }
       ],
       "outputFilePath" : "/Users/blaineasbury/Documents/Websites/TrackpadTyping/.build/arm64-apple-macosx/release/TrackpadTyping.product/Objects.LinkFileList"
